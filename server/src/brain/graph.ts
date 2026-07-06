@@ -16,6 +16,7 @@ export const HUBS: { id: string; label: string; type: NodeType; description: str
   { id: "hub_documents", label: "Documents", type: "hub", description: "Documents indexés, interrogeables (RAG)." },
   { id: "hub_skills", label: "Compétences", type: "hub", description: "Les outils et capacités de JARVIS." },
   { id: "hub_system", label: "Système", type: "hub", description: "L'architecture de JARVIS, connue de lui-même." },
+  { id: "hub_wiki", label: "Wiki", type: "hub", description: "Synthèses rédigées et entretenues par JARVIS (pattern LLM Wiki) : la connaissance compilée, pas seulement stockée." },
 ];
 
 const HUB_BY_TYPE: Record<string, string> = {
@@ -28,6 +29,7 @@ const HUB_BY_TYPE: Record<string, string> = {
   skill: "hub_skills",
   system: "hub_system",
   proposal: "hub_skills",
+  wiki: "hub_wiki",
 };
 
 export function tokenize(text: string): string[] {
@@ -89,6 +91,38 @@ export function addNode(input: {
 
   save();
   return node;
+}
+
+/** Met à jour un nœud existant (utilisé quand une page wiki est révisée). */
+export function updateNode(id: string, patch: { label?: string; content?: string; tags?: string[] }): BrainNode | null {
+  const db = getDb();
+  const node = db.nodes.find((n) => n.id === id);
+  if (!node) return null;
+  if (patch.label !== undefined) node.label = patch.label.slice(0, 80);
+  if (patch.content !== undefined) node.content = patch.content;
+  if (patch.tags !== undefined) node.tags = patch.tags;
+  save();
+  return node;
+}
+
+/** Migration douce : ajoute les hubs manquants sur une base déjà semée. */
+export function ensureHubs(): void {
+  const db = getDb();
+  if (db.nodes.length === 0) return; // seedBrain s'en chargera
+  for (const h of HUBS) {
+    if (db.nodes.some((n) => n.id === h.id)) continue;
+    db.nodes.push({
+      id: h.id,
+      type: "hub",
+      label: h.label,
+      content: h.description,
+      tags: [],
+      cluster: h.id,
+      createdAt: new Date().toISOString(),
+    });
+    addEdge(h.id, "hub_system", "cluster", 0.5);
+  }
+  save();
 }
 
 /** Semence initiale : hubs + nœuds décrivant l'architecture de JARVIS (auto-connaissance). */

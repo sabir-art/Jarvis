@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { config, hasApiKey } from "./config.js";
-import { seedBrain } from "./brain/graph.js";
+import { seedBrain, ensureHubs } from "./brain/graph.js";
 import { api } from "./routes.js";
 
 const app = express();
@@ -11,6 +11,7 @@ app.use(express.json({ limit: "25mb" })); // images en base64
 app.use("/api", api);
 
 seedBrain();
+ensureHubs();
 
 app.listen(config.port, () => {
   console.log(`◈ JARVIS server — http://localhost:${config.port}`);

@@ -5,6 +5,7 @@ import { runChat, type ChatEvent } from "./ai/jarvis.js";
 import { config, hasApiKey } from "./config.js";
 import { listProposals, reviewProposal } from "./selfdev/index.js";
 import { searchKnowledge } from "./memory/search.js";
+import { scheduleWikiIngest, lintWiki } from "./wiki/index.js";
 
 export const api = Router();
 
@@ -115,11 +116,45 @@ api.post("/documents", (req, res) => {
   db.documents.push(doc);
   logActivity("document", `Document indexé : ${title}`);
   save();
+  scheduleWikiIngest({ kind: "document", title, content: content.slice(0, 6000) });
   res.json({ document: { id: doc.id, title: doc.title }, node });
 });
 
 api.get("/knowledge/search", (req, res) => {
   res.json({ results: searchKnowledge(String(req.query.q ?? ""), 10) });
+});
+
+/* ── Wiki (LLM Wiki : synthèses entretenues par JARVIS) ────────── */
+
+api.get("/wiki", (_req, res) => {
+  res.json({
+    pages: getDb().wikiPages.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      title: p.title,
+      updatedAt: p.updatedAt,
+      sources: p.sources.length,
+      nodeId: p.nodeId,
+    })),
+  });
+});
+
+api.get("/wiki/:slug", (req, res) => {
+  const page = getDb().wikiPages.find((p) => p.slug === req.params.slug);
+  if (!page) {
+    res.status(404).json({ error: "page introuvable" });
+    return;
+  }
+  res.json({ page });
+});
+
+api.post("/wiki/lint", async (_req, res) => {
+  try {
+    const report = await lintWiki();
+    res.json({ report });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 /* ── Auto-développement supervisé ──────────────────────────────── */

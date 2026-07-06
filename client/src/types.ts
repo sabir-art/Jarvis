@@ -8,7 +8,8 @@ export type NodeType =
   | "document"
   | "skill"
   | "system"
-  | "proposal";
+  | "proposal"
+  | "wiki";
 
 export interface BrainNode {
   id: string;
@@ -68,6 +69,15 @@ export interface SkillProposal {
   rationale: string;
   status: "pending" | "approved" | "rejected";
   createdAt: string;
+}
+
+export interface WikiPageSummary {
+  id: string;
+  slug: string;
+  title: string;
+  updatedAt: string;
+  sources: number;
+  nodeId?: string;
 }
 
 export interface ToolActivity {

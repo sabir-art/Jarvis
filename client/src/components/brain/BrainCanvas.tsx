@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls, Stars } from "@react-three/drei";
 import * as THREE from "three";
@@ -103,6 +104,23 @@ function Edges({ layout }: { layout: GalaxyLayout }) {
   );
 }
 
+/** Texture circulaire douce pour les particules (sinon : carrés visibles de près). */
+let dotTexture: THREE.Texture | null = null;
+function getDotTexture(): THREE.Texture {
+  if (dotTexture) return dotTexture;
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.4, "rgba(255,255,255,0.45)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  dotTexture = new THREE.CanvasTexture(c);
+  return dotTexture;
+}
+
 /** Poussière d'étoiles : la masse visuelle de chaque galaxie. */
 function ClusterDust({ layout }: { layout: GalaxyLayout }) {
   const nodes = useJarvis((s) => s.nodes);
@@ -123,10 +141,11 @@ function ClusterDust({ layout }: { layout: GalaxyLayout }) {
             </bufferGeometry>
             <pointsMaterial
               color={clusterColor(h.id)}
-              size={0.14}
+              size={0.22}
+              map={getDotTexture()}
               sizeAttenuation
               transparent
-              opacity={0.4}
+              opacity={0.5}
               blending={THREE.AdditiveBlending}
               depthWrite={false}
             />
@@ -419,13 +438,19 @@ export default function BrainCanvas() {
       )}
 
       {selected && (
-        <div className="node-detail">
+        <div className={`node-detail ${selected.type === "wiki" ? "wiki" : ""}`}>
           <button className="close" onClick={() => selectNode(null, false)}>✕</button>
           <div className="node-type" style={{ color: clusterColor(selected.type === "hub" ? selected.id : selected.cluster) }}>
             {TYPE_LABELS[selected.type] ?? selected.type}
           </div>
           <h3>{selected.label}</h3>
-          <p>{selected.content || "(sans contenu)"}</p>
+          {selected.type === "wiki" ? (
+            <div className="wiki-page">
+              <ReactMarkdown>{selected.content || "(page vide)"}</ReactMarkdown>
+            </div>
+          ) : (
+            <p>{selected.content || "(sans contenu)"}</p>
+          )}
           {selected.tags.length > 0 && (
             <div className="tags">
               {selected.tags.map((t) => (

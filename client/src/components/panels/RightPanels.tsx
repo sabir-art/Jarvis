@@ -1,3 +1,6 @@
+import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { postJSON } from "../../api";
 import { useJarvis } from "../../state";
 
 function StatusPanel() {
@@ -59,6 +62,67 @@ function MemoryPanel() {
             {m.content}
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function WikiPanel() {
+  const wikiPages = useJarvis((s) => s.wikiPages);
+  const selectNode = useJarvis((s) => s.selectNode);
+  const [linting, setLinting] = useState(false);
+  const [report, setReport] = useState<string | null>(null);
+
+  const runLint = async () => {
+    setLinting(true);
+    setReport(null);
+    try {
+      const r = await postJSON<{ report: string }>("/api/wiki/lint");
+      setReport(r.report);
+    } catch {
+      setReport("L'audit a échoué (serveur injoignable ?).");
+    } finally {
+      setLinting(false);
+    }
+  };
+
+  return (
+    <section className="panel">
+      <div className="panel-title">
+        Wiki <span className="count">{wikiPages.length} pages</span>
+      </div>
+      <div className="panel-body">
+        {wikiPages.length === 0 && (
+          <span style={{ color: "var(--text-dim)" }}>
+            JARVIS rédigera ici ses pages de synthèse, nourries par vos notes, mémoires et documents.
+          </span>
+        )}
+        {wikiPages
+          .slice()
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .map((p) => (
+            <div
+              key={p.id}
+              className="wiki-row"
+              onClick={() => p.nodeId && selectNode(p.nodeId, true)}
+              title="Ouvrir dans la galaxie"
+            >
+              <span className="wiki-title">{p.title}</span>
+              <span className="wiki-meta">
+                {p.sources} src · {p.updatedAt.slice(0, 10)}
+              </span>
+            </div>
+          ))}
+        {wikiPages.length > 0 && (
+          <button className="btn" style={{ marginTop: 8 }} disabled={linting} onClick={() => void runLint()}>
+            {linting ? "⟳ audit en cours…" : "🧹 Auditer la cohérence (lint)"}
+          </button>
+        )}
+        {report && (
+          <div className="lint-report">
+            <ReactMarkdown>{report}</ReactMarkdown>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -126,6 +190,7 @@ export default function RightPanels() {
   return (
     <aside className="panels">
       <StatusPanel />
+      <WikiPanel />
       <TasksPanel />
       <MemoryPanel />
       <SelfDevPanel />

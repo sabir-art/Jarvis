@@ -17,6 +17,7 @@ recherche, code, vision) — le tout dans un cockpit sombre et lumineux.
 | **Outils (function calling)** | Boucle agentique serveur : date/heure, mémoire (`remember`/`recall`), notes, tâches (créer/lister/terminer), recherche dans la connaissance (RAG), recherche web, exécution de JavaScript en bac à sable. Chaque action alimente le cerveau en temps réel. |
 | **Mémoire persistante** | Tout ce que JARVIS apprend (faits, notes, tâches, recherches, documents, conversations) devient un nœud du cerveau, relié sémantiquement à ses voisins. Persistance JSON sur disque. |
 | **RAG documents** | Indexation de documents texte (`POST /api/documents`) + recherche TF-IDF interrogeable par JARVIS (`search_knowledge`). |
+| **LLM Wiki** | D'après le [pattern de Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) : JARVIS **rédige et entretient des pages de synthèse** markdown interconnectées (renvois `[[...]]`). *Ingest* automatique à chaque note/mémoire/document (asynchrone, sérialisé), outil `consult_wiki` pour répondre depuis la connaissance déjà compilée, et *lint* (bouton « Auditer la cohérence ») qui traque contradictions, doublons et renvois cassés. Les pages vivent dans le domaine « Wiki » de la galaxie et se lisent en markdown. |
 | **Voix** | Dictée (Web Speech API), mode **mains libres** avec mot d'activation « Jarvis, … », synthèse vocale des réponses (fr-FR). Sans service externe — Chrome/Edge recommandés. |
 | **Vision** | Joignez des images au chat : elles sont envoyées à Claude (blocs image base64). |
 | **Auto-développement supervisé** | JARVIS peut proposer de **nouveaux outils** (il écrit le code JS via `propose_skill`) ; vous les approuvez ou rejetez dans le panneau *Auto-dev*. Une compétence approuvée devient immédiatement un outil actif, exécuté en bac à sable. Chaque proposition est journalisée dans le cerveau. |
@@ -113,6 +114,9 @@ GET  /api/notes|tasks|memories       collections
 POST /api/tasks/:id/toggle           cocher/décocher
 POST /api/documents                  indexer un document texte (RAG)
 GET  /api/knowledge/search?q=        recherche TF-IDF
+GET  /api/wiki                       pages de synthèse (LLM Wiki)
+GET  /api/wiki/:slug                 une page complète
+POST /api/wiki/lint                  audit de cohérence du wiki
 GET  /api/selfdev/proposals          propositions d'auto-dev
 POST /api/selfdev/proposals/:id/review  {decision: approved|rejected}
 ```

@@ -47,6 +47,7 @@ export const CLUSTER_COLORS: Record<string, string> = {
   hub_documents: "#5ec6ff",
   hub_skills: "#ff8a3d",
   hub_system: "#57e6ff",
+  hub_wiki: "#a8ff6b",
 };
 
 export function clusterColor(clusterId: string): string {
@@ -64,6 +65,7 @@ export const TYPE_LABELS: Record<string, string> = {
   skill: "Compétence",
   system: "Système",
   proposal: "Proposition",
+  wiki: "Synthèse wiki",
 };
 
 /** Base d'importance visuelle par type de nœud. */
@@ -77,6 +79,7 @@ const TYPE_SIZE: Record<string, number> = {
   skill: 1.25,
   system: 1.1,
   proposal: 1.2,
+  wiki: 1.4,
 };
 
 export interface GalaxyLayout {

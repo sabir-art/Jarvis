@@ -10,7 +10,8 @@ export type NodeType =
   | "document"
   | "skill"
   | "system"
-  | "proposal";
+  | "proposal"
+  | "wiki";
 
 export interface BrainNode {
   id: string;
@@ -93,6 +94,22 @@ export interface SkillProposal {
   nodeId?: string;
 }
 
+/**
+ * Page du wiki (pattern « LLM Wiki » de Karpathy) : une synthèse markdown
+ * rédigée et entretenue par JARVIS, mise à jour à chaque ingestion de source.
+ */
+export interface WikiPage {
+  id: string;
+  slug: string;
+  title: string;
+  content: string;
+  /** intitulés des sources intégrées à cette page */
+  sources: string[];
+  createdAt: string;
+  updatedAt: string;
+  nodeId?: string;
+}
+
 export interface ActivityEvent {
   id: string;
   kind: string;
@@ -110,4 +127,5 @@ export interface Database {
   documents: JarvisDocument[];
   proposals: SkillProposal[];
   activity: ActivityEvent[];
+  wikiPages: WikiPage[];
 }

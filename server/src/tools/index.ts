@@ -4,6 +4,7 @@ import { addNode } from "../brain/graph.js";
 import { searchKnowledge } from "../memory/search.js";
 import { runJavaScript, runSkillCode } from "./sandbox.js";
 import { createProposal, approvedSkills } from "../selfdev/index.js";
+import { scheduleWikiIngest, queryWiki } from "../wiki/index.js";
 import type { BrainNode } from "../types.js";
 
 /**
@@ -62,6 +63,7 @@ const builtinTools: JarvisTool[] = [
       db.memories.push({ id: newId("mem"), content, category, createdAt: new Date().toISOString(), nodeId: node.id });
       logActivity("memory", `Mémorisé : ${content.slice(0, 80)}`);
       save();
+      scheduleWikiIngest({ kind: "mémoire", title: content.slice(0, 60), content });
       return { result: "Information mémorisée et ajoutée au cerveau.", node };
     },
   },
@@ -106,6 +108,7 @@ const builtinTools: JarvisTool[] = [
       db.notes.push({ id: newId("note"), title, content, tags, createdAt: new Date().toISOString(), nodeId: node.id });
       logActivity("note", `Note créée : ${title}`);
       save();
+      scheduleWikiIngest({ kind: "note", title, content });
       return { result: `Note « ${title} » créée.`, node };
     },
   },
@@ -185,6 +188,29 @@ const builtinTools: JarvisTool[] = [
       if (hits.length === 0) return { result: "Aucun document indexé ne correspond." };
       return {
         result: hits.map((h, i) => `[source ${i + 1} — ${h.kind} « ${h.title} »]\n${h.excerpt}`).join("\n\n"),
+      };
+    },
+  },
+  {
+    definition: {
+      name: "consult_wiki",
+      description:
+        "Consulte le wiki de synthèses que JARVIS entretient (pattern LLM Wiki) : la connaissance déjà compilée, croisée et à jour. À privilégier pour les questions de fond sur les sujets, projets et personnes que l'utilisateur vous a confiés.",
+      input_schema: {
+        type: "object",
+        properties: { query: { type: "string", description: "Le sujet ou la question." } },
+        required: ["query"],
+      },
+    },
+    handler: async (input) => {
+      const pages = queryWiki(str(input, "query"));
+      if (pages.length === 0) {
+        return { result: "Aucune page wiki pertinente (le wiki se construit au fil des notes, mémoires et documents)." };
+      }
+      return {
+        result: pages
+          .map((p) => `[[${p.title}]] (maj ${p.updatedAt.slice(0, 10)})\n${p.content.slice(0, 1500)}`)
+          .join("\n\n---\n\n"),
       };
     },
   },

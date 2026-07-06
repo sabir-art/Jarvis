@@ -20,6 +20,7 @@ const EMPTY: Database = {
   documents: [],
   proposals: [],
   activity: [],
+  wikiPages: [],
 };
 
 let db: Database | null = null;

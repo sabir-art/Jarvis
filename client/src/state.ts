@@ -10,6 +10,7 @@ import type {
   Task,
   ToolActivity,
   UIMessage,
+  WikiPageSummary,
 } from "./types";
 
 interface JarvisState {
@@ -40,6 +41,7 @@ interface JarvisState {
   memories: Memory[];
   activity: ActivityEvent[];
   proposals: SkillProposal[];
+  wikiPages: WikiPageSummary[];
   apiKeyConfigured: boolean;
   toggleTask: (id: string) => Promise<void>;
   reviewProposal: (id: string, decision: "approved" | "rejected") => Promise<void>;
@@ -96,6 +98,7 @@ export const useJarvis = create<JarvisState>((set, get) => ({
   memories: [],
   activity: [],
   proposals: [],
+  wikiPages: [],
   apiKeyConfigured: true,
 
   setModelChoice: (m) => set({ modelChoice: m }),
@@ -188,17 +191,19 @@ export const useJarvis = create<JarvisState>((set, get) => ({
   },
 
   refreshPanels: async () => {
-    const [tasks, memories, activity, proposals] = await Promise.all([
+    const [tasks, memories, activity, proposals, wiki] = await Promise.all([
       getJSON<{ tasks: Task[] }>("/api/tasks"),
       getJSON<{ memories: Memory[] }>("/api/memories"),
       getJSON<{ activity: ActivityEvent[] }>("/api/activity"),
       getJSON<{ proposals: SkillProposal[] }>("/api/selfdev/proposals"),
+      getJSON<{ pages: WikiPageSummary[] }>("/api/wiki"),
     ]);
     set({
       tasks: tasks.tasks,
       memories: memories.memories,
       activity: activity.activity,
       proposals: proposals.proposals,
+      wikiPages: wiki.pages,
     });
   },
 

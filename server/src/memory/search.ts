@@ -22,6 +22,7 @@ function corpus(): Searchable[] {
   for (const n of db.notes) items.push({ id: n.id, kind: "note", title: n.title, text: `${n.title} ${n.content}` });
   for (const d of db.documents) items.push({ id: d.id, kind: "document", title: d.title, text: `${d.title} ${d.content}` });
   for (const t of db.tasks) items.push({ id: t.id, kind: "tâche", title: t.title, text: t.title });
+  for (const w of db.wikiPages) items.push({ id: w.id, kind: "wiki", title: w.title, text: `${w.title} ${w.content}` });
   return items;
 }
 
