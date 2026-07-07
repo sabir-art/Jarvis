@@ -15,12 +15,14 @@ export const api = Router();
 
 /* ── Santé & configuration ─────────────────────────────────────── */
 
-api.get("/health", (_req, res) => {
+api.get("/health", async (_req, res) => {
+  const { ttsStatus } = await import("./tts.js");
   res.json({
     ok: true,
     apiKeyConfigured: hasApiKey(),
     demoMode: isDemoMode(),
     models: config.models,
+    tts: ttsStatus(),
   });
 });
 
