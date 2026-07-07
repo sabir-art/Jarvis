@@ -65,7 +65,7 @@ async function replyMusic(m: string): Promise<DemoReply> {
     const { playOnSpotify } = await import("../connectors/live.js");
     // ce qui reste une fois les mots de commande retirés = la demande
     const query = strip(m)
-      .replace(/\b(jarvis|joue|mets?|lance|allume|balance|play|demarre|ecoutez?|ecouter|j'aimerais|je veux|je voudrais|peux-tu|tu peux|s'il (?:te|vous) plait|stp|svp|en fait|un peu|quelque chose|un truc|de bien)\b/g, " ")
+      .replace(/\b(vas[- ]?y|jarvis|joue|mets?|lance|alu\w*|remets?|balance|play|demarre|ecoutez?|ecouter|j'aimerais|je veux|je voudrais|peux-tu|tu peux|s'il (?:te|vous) plait|stp|svp|en fait|un peu|quelque chose|un truc|de bien)\b/g, " ")
       .replace(/\b(la |le |les |une? |des |du |de |d'|ma |mon |mes |moi )\b/g, " ")
       .replace(/\b(musiques?|music|chansons?|morceaux?|titres?|sons?|zik)\b/g, " ")
       .replace(/\b(dans|sur|avec)?\s*spotify\b/g, " ")
@@ -248,9 +248,16 @@ type Intent =
  * le domaine au meilleur score (≥ 2) l'emporte. Tout est comparé sans
  * accents : « réunion », « reunion » et « REUNION » se valent.
  */
+/** Tolérance aux fautes : lettres doublées écrasées (« alumme » ≈ « allume »). */
+function collapse(s: string): string {
+  return s.replace(/(.)\1+/g, "$1");
+}
+
 function detectIntent(mn: string): Intent | null {
+  const mc = collapse(mn);
   const w = (weight: number, ...words: string[]) =>
-    weight * words.filter((x) => new RegExp(`\\b${x}`).test(mn)).length;
+    weight *
+    words.filter((x) => new RegExp(`\\b${x}`).test(mn) || new RegExp(`\\b${collapse(x)}`).test(mc)).length;
 
   const scores: [Intent, number][] = [
     ["music", w(2, "musique", "music", "chanson", "morceau", "playlist", "spotify", "ecouter", "ecoute", "zik", "volume", "pause") + w(1, "joue", "mets", "lance", "allume", "balance", "play", "son")],
@@ -383,7 +390,13 @@ async function matchIntent(raw: string): Promise<DemoReply> {
     }
   }
 
-  /* ── 6. Dernier filet : le wiki connaît peut-être le sujet ── */
+  /* ── 6. Verbe de lecture en tête de phrase : c'est de la musique
+        (« vas-y allume solaris », fautes de frappe comprises) ── */
+  if (/^(?:vas[- ]?y[, ]*)?(?:jarvis[, ]*)?(?:joue|mets?|lance|remets?|balance|play|alu\w*)\b/.test(collapse(mn))) {
+    return replyMusic(m);
+  }
+
+  /* ── 7. Dernier filet : le wiki connaît peut-être le sujet ── */
   const wiki = replyWiki(raw);
   if (wiki && mn.split(" ").length <= 12) return wiki;
 

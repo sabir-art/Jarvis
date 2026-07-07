@@ -363,10 +363,18 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
       await new Promise((r) => setTimeout(r, 2500));
       res = await spotifyCall(token, `/me/player/play${dev}`, { method: "PUT", body: play.body });
     }
-    if (res.status === 403) return { ok: false, reason: "premium_required", launched };
     if (res.status >= 400) {
       const msg = (res.body.error as { message?: string })?.message ?? `HTTP ${res.status}`;
-      if (/premium/i.test(msg)) return { ok: false, reason: "premium_required", launched };
+      if (/permission|scope/i.test(msg)) {
+        // jeton acquis avant l'ajout du droit « commande du lecteur »
+        return {
+          ok: false,
+          reason: "error",
+          detail: "il me manque le droit de commander votre lecteur. Connecteurs → Spotify → « Ré-autoriser », puis redemandez-moi",
+          launched,
+        };
+      }
+      if (res.status === 403 || /premium/i.test(msg)) return { ok: false, reason: "premium_required", launched };
       if (/device/i.test(msg)) return { ok: false, reason: "no_device", launched };
       return { ok: false, reason: "error", detail: msg, launched };
     }
