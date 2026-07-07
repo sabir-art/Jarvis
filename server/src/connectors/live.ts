@@ -300,7 +300,13 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
       const devices = await spotifyCall(token, "/me/player/devices");
       if (devices.status === 401 || devices.status === 403) return "unauthorized" as const;
       const list = (devices.body.devices as { id: string; name: string; is_active: boolean }[]) ?? [];
-      return list.find((d) => d.is_active) ?? list[0] ?? null;
+      // priorité : appareil actif > lecteur intégré J.A.R.V.I.S > le premier vu
+      return (
+        list.find((d) => d.is_active) ??
+        list.find((d) => /j\.?a\.?r\.?v\.?i\.?s/i.test(d.name)) ??
+        list[0] ??
+        null
+      );
     };
 
     let device = await findDevice();

@@ -177,8 +177,15 @@ s'affiche, étape par étape.
 Une fois branché : e-mails, agenda, fichiers Drive, playlists Spotify, canaux
 Slack et pages Notion deviennent **réels** — dans les popups, dans le chat
 (mode démo comme mode complet), et via les outils de Claude (`check_emails`,
-`check_calendar`, `search_drive`, `spotify_status`, `read_slack`,
-`search_notion`).
+`check_calendar`, `search_drive`, `spotify_status`, `play_music`,
+`read_slack`, `search_notion`).
+
+**Spotify joue la musique pour de vrai** : « allume Solaris » cherche la
+piste et la lance sur votre appareil actif ; si aucun lecteur n'est ouvert,
+JARVIS **ouvre l'application** lui-même. Mieux : avec un compte Premium, la
+page JARVIS est **elle-même un appareil Spotify** (lecteur intégré
+« J.A.R.V.I.S » — Web Playback SDK) : la musique se joue directement dans
+l'outil, avec mini-lecteur (pochette, pause, suivant) dans le cockpit.
 
 Les clés sont stockées dans `server/data/connectors.json` — **local et ignoré
 par git**, jamais exposé au client. « Déconnecter » efface la clé.

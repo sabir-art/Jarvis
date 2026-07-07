@@ -8,11 +8,13 @@ import Avatar3D from "./Avatar3D";
 import Hud from "./Hud";
 import BrainCanvas from "./brain/BrainCanvas";
 import SettingsSheet from "./SettingsSheet";
+import { playerControls } from "../spotify";
 import {
   IconGear,
   IconImage,
   IconMic,
   IconOrb,
+  IconPlay,
   IconSend,
   IconSparkles,
   IconSpeaker,
@@ -40,6 +42,35 @@ interface Attachment {
 
 function shortModel(id?: string | null): string {
   return (id ?? "—").replace(/^claude-/, "");
+}
+
+/**
+ * Lecteur Spotify intégré : la page JARVIS est un appareil Spotify —
+ * la musique se joue ici, sans ouvrir l'application.
+ */
+function SpotifyBar() {
+  const p = useJarvis((s) => s.spotifyPlayer);
+  if (!p.ready && !p.track) return null;
+  return (
+    <section className="glass card mini spotify-bar">
+      {p.track?.artwork ? (
+        <img className="sp-art" src={p.track.artwork} alt="" />
+      ) : (
+        <div className="sp-art placeholder">♪</div>
+      )}
+      <div className="sp-meta">
+        <div className="sp-title">{p.track?.title ?? "Lecteur J.A.R.V.I.S prêt"}</div>
+        <div className="sp-artist">{p.track?.artist ?? "demandez un morceau"}</div>
+      </div>
+      <div className="sp-controls">
+        <button className="icon-btn" title="Précédent" onClick={() => void playerControls.previous()}>⏮</button>
+        <button className="icon-btn" title={p.paused ? "Lecture" : "Pause"} onClick={() => void playerControls.toggle()}>
+          {p.paused ? <IconPlay size={15} /> : "⏸"}
+        </button>
+        <button className="icon-btn" title="Suivant" onClick={() => void playerControls.next()}>⏭</button>
+      </div>
+    </section>
+  );
 }
 
 /** Colonne de gauche : HUD, réglages, orbe, données vivantes. */
@@ -102,6 +133,8 @@ function LeftColumn({
           <Orb size={185} onClick={onOrbClick} />
         )}
       </div>
+
+      <SpotifyBar />
 
       <section className="glass card mini">
         <h2>Statut</h2>

@@ -84,6 +84,20 @@ api.post("/connectors/:id/credentials", async (req, res) => {
 });
 
 /**
+ * Jeton d'accès Spotify pour le lecteur intégré (Web Playback SDK) :
+ * la page JARVIS devient elle-même un appareil Spotify.
+ */
+api.get("/connectors/spotify/token", async (_req, res) => {
+  const { getAccessToken } = await import("./connectors/auth.js");
+  const token = await getAccessToken("spotify");
+  if (!token) {
+    res.status(204).end();
+    return;
+  }
+  res.json({ token });
+});
+
+/**
  * Ré-autorisation OAuth avec le client ID/secret déjà enregistrés — utile
  * quand les droits demandés évoluent (ex. commande du lecteur Spotify).
  */

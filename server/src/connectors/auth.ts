@@ -91,6 +91,9 @@ export const AUTH_SPECS: Record<string, AuthSpec> = {
       "user-read-recently-played",
       "user-read-playback-state",
       "user-modify-playback-state", // lancer/reprendre la lecture
+      "streaming", // lecteur intégré dans JARVIS (Web Playback SDK)
+      "user-read-email",
+      "user-read-private",
     ],
   },
   notion: {

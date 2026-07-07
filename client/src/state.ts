@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { getJSON, postJSON, streamChat } from "./api";
+import { startSpotifyPlayer, type PlayerState } from "./spotify";
 import type {
   ActivityEvent,
   BrainEdge,
@@ -64,6 +65,9 @@ interface JarvisState {
   demoMode: boolean;
   toggleTask: (id: string) => Promise<void>;
   reviewProposal: (id: string, decision: "approved" | "rejected") => Promise<void>;
+
+  /* lecteur Spotify intégré (la page JARVIS est un appareil Spotify) */
+  spotifyPlayer: PlayerState;
 
   /* chargement */
   bootstrap: () => Promise<void>;
@@ -525,9 +529,12 @@ export const useJarvis = create<JarvisState>((set, get) => ({
     });
   },
 
+  spotifyPlayer: { ready: false, deviceId: null, track: null, paused: true },
+
   refreshConnectors: async () => {
     const conn = await getJSON<{ connectors: ConnectorInfo[] }>("/api/connectors");
     set({ connectors: conn.connectors });
+    maybeStartPlayer(conn.connectors, set);
   },
 
   bootstrap: async () => {
@@ -536,6 +543,7 @@ export const useJarvis = create<JarvisState>((set, get) => ({
       set({ apiKeyConfigured: health.apiKeyConfigured, demoMode: health.demoMode });
       const conn = await getJSON<{ connectors: ConnectorInfo[] }>("/api/connectors");
       set({ connectors: conn.connectors });
+      maybeStartPlayer(conn.connectors, set);
       const msgs = await getJSON<{ messages: UIMessage[] }>("/api/messages");
       set({ messages: msgs.messages });
       await Promise.all([get().refreshGraph(), get().refreshPanels()]);
@@ -544,3 +552,14 @@ export const useJarvis = create<JarvisState>((set, get) => ({
     }
   },
 }));
+
+/** Démarre le lecteur intégré dès que le connecteur Spotify est branché. */
+function maybeStartPlayer(
+  connectors: ConnectorInfo[],
+  set: (fn: (s: JarvisState) => Partial<JarvisState>) => void,
+): void {
+  if (connectors.find((c) => c.id === "spotify")?.status !== "connected") return;
+  void startSpotifyPlayer((patch) =>
+    set((s) => ({ spotifyPlayer: { ...s.spotifyPlayer, ...patch } })),
+  );
+}
