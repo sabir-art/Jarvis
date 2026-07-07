@@ -32,7 +32,7 @@ contenu : supprimez `server/data/jarvis.json`.
 | Domaine | Ce qui est livré |
 |---|---|
 | **Interface minimaliste** | Orbe noire animée (respiration, halo d'écoute, scintillement de réflexion, pulsation de parole), rail de navigation en verre, vues dédiées (Jarvis, Cerveau, Wiki, Connecteurs, Agenda & tâches, Auto-dev), typographies embarquées (Quicksand + Inter), icônes SVG sur mesure. |
-| **Connecteurs** | 12 connecteurs avec icônes de marque : Gmail, Google Agenda, Google Drive, Spotify, Notion, Slack, Figma, Adobe, Higgsfield, Runware, Webflow, Chrome. Architecture isolée : un connecteur = un module avec fournisseur de données ; en démo les données sont simulées, le branchement réel (OAuth/MCP) remplace le fournisseur sans toucher au reste. |
+| **Connecteurs** | 12 connecteurs avec icônes de marque : Gmail, Google Agenda, Google Drive, Spotify, Notion, Slack, Figma, Adobe, Higgsfield, Runware, Webflow, Chrome. **Branchement guidé depuis l'UI** : jeton à coller (Notion, Slack, Figma, Webflow…) ou OAuth (Google, Spotify) — étapes affichées, test de la clé, statut « Connecté ». Une fois branché, e-mails, agenda, Drive, playlists, canaux Slack et pages Notion sont **réels** ; sinon les données restent simulées. |
 | **Cerveau-galaxie 3D** | Graphe de connaissance rendu en WebGL (three.js / react-three-fiber) : hubs de domaines sur une sphère de Fibonacci, nœuds reliés par arcs, rotation douce, halos, champ d'étoiles. Zoom sémantique (les étiquettes apparaissent en s'approchant), survol, clic → vol de caméra + panneau de détail, recherche qui « vole » jusqu'au nœud, fil d'ariane. |
 | **Conversation** | Streaming token par token (SSE), markdown riche, personnalité JARVIS (posé, vouvoiement, humour pince-sans-dire). Historique persistant. |
 | **Routeur multi-modèle** | JARVIS choisit lui-même son modèle Claude selon la tâche : `claude-haiku-4-5` (rapide) / `claude-sonnet-5` (équilibré) / `claude-opus-4-8` (profond). Surcharge manuelle dans la barre du haut. Le modèle utilisé **et la raison du choix** sont affichés sur chaque réponse. |
@@ -131,8 +131,11 @@ Jarvis/
 
 ```
 GET  /api/health                     état + modèles + mode démo
-GET  /api/connectors                 liste des connecteurs
-GET  /api/connectors/:id             données d'un connecteur (démo)
+GET  /api/connectors                 connecteurs + statut + marche à suivre
+GET  /api/connectors/:id             données d'un connecteur (réelles si branché)
+POST /api/connectors/:id/credentials brancher : {token} ou {clientId, clientSecret}
+GET  /api/connectors/:id/callback    retour OAuth du fournisseur
+POST /api/connectors/:id/disconnect  débrancher (efface la clé)
 POST /api/chat                       chat SSE {message, modelOverride?, images?}
 GET  /api/brain/graph                nœuds + arêtes du cerveau
 GET  /api/brain/search?q=            recherche de nœuds
@@ -146,6 +149,28 @@ POST /api/wiki/lint                  audit de cohérence du wiki
 GET  /api/selfdev/proposals          propositions d'auto-dev
 POST /api/selfdev/proposals/:id/review  {decision: approved|rejected}
 ```
+
+## ✦ Connecter vos vrais services
+
+Ouvrez la vue **Connecteurs** et cliquez une carte : la marche à suivre exacte
+s'affiche, étape par étape.
+
+- **Jeton à coller** (2 minutes) — Notion, Slack, Figma, Webflow, Runware,
+  Higgsfield, Adobe : créez un jeton chez le fournisseur (lien direct fourni),
+  collez-le, JARVIS le **teste** puis l'enregistre.
+- **OAuth** (5 minutes) — Gmail, Google Agenda, Google Drive, Spotify : créez
+  une app gratuite chez le fournisseur, déclarez l'URI de redirection affichée,
+  collez le client ID + secret, cliquez **Autoriser**. Les jetons se
+  rafraîchissent tout seuls ensuite.
+
+Une fois branché : e-mails, agenda, fichiers Drive, playlists Spotify, canaux
+Slack et pages Notion deviennent **réels** — dans les popups, dans le chat
+(mode démo comme mode complet), et via les outils de Claude (`check_emails`,
+`check_calendar`, `search_drive`, `spotify_status`, `read_slack`,
+`search_notion`).
+
+Les clés sont stockées dans `server/data/connectors.json` — **local et ignoré
+par git**, jamais exposé au client. « Déconnecter » efface la clé.
 
 ## ✦ Étendre JARVIS
 

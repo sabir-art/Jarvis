@@ -3,16 +3,15 @@ import { addNode } from "../brain/graph.js";
 import { queryWiki } from "../wiki/index.js";
 import { searchKnowledge } from "../memory/search.js";
 import { getWeather } from "../weather.js";
+import { demoCreative, demoFigmaFiles } from "../connectors/index.js";
 import {
-  demoCreative,
-  demoDriveFiles,
-  demoEmails,
-  demoEvents,
-  demoFigmaFiles,
-  demoNotionPages,
-  demoSlackMessages,
-  demoTracks,
-} from "../connectors/index.js";
+  getDriveFiles,
+  getEmails,
+  getEvents,
+  getNotionPages,
+  getSlackMessages,
+  getTracks,
+} from "../connectors/live.js";
 import type { ChatEvent, ChatInput } from "../ai/jarvis.js";
 
 /**
@@ -115,66 +114,75 @@ async function matchIntent(raw: string): Promise<DemoReply> {
 
   /* Musique (Spotify) — verbe impératif + objet musical, ou mention explicite de Spotify */
   if (/\b(joue|mets?|lance|play)\b.*\b(musique|playlist|chanson|morceau|titre|spotify|son)\b/.test(m) || /\bspotify\b/.test(m) || /^\s*(de la )?musique\s*[!.]?\s*$/.test(m)) {
-    const playlist = /focus/.test(m) ? demoTracks.playlists[0] : /nuit|night|coding/.test(m) ? demoTracks.playlists[1] : demoTracks.playlists[0];
+    const { data: tracks, live } = await getTracks();
+    const wanted = tracks.playlists.find((p) => m.includes(p.name.toLowerCase().split(/\s|—/)[0]));
+    const playlist = wanted ?? (/focus/.test(m) ? tracks.playlists[0] : /nuit|night|coding/.test(m) ? (tracks.playlists[1] ?? tracks.playlists[0]) : tracks.playlists[0]);
     return {
-      tool: { name: "spotify · play_music", result: `Lecture démarrée : ${playlist.name}` },
-      ui: { panel: "spotify", payload: { ...demoTracks, playing: playlist } },
-      text: `C'est parti, Monsieur : **${playlist.name}** (${playlist.tracks} titres, ${playlist.duration}). *${demoTracks.nowPlaying.title}* de ${demoTracks.nowPlaying.artist} ouvre la session. Ensuite : ${demoTracks.queue.map((t) => `*${t.title}*`).join(", ")}.`,
+      tool: { name: "spotify · play_music", result: `${live ? "Spotify connecté — " : ""}playlist : ${playlist.name}` },
+      ui: { panel: "spotify", payload: { ...tracks, playing: playlist } },
+      text: `C'est parti, Monsieur : **${playlist.name}** (${playlist.tracks} titres${playlist.duration !== "—" ? `, ${playlist.duration}` : ""}). *${tracks.nowPlaying.title}* de ${tracks.nowPlaying.artist} ${live ? "est sur votre platine" : "ouvre la session"}.${tracks.queue.length ? ` Ensuite : ${tracks.queue.map((t) => `*${t.title}*`).join(", ")}.` : ""}`,
     };
   }
 
   /* E-mails (Gmail) */
   if (/\b(mails?|e-?mails?|courriels?|gmail)\b|boîte de réception|messages? importants?/.test(m)) {
-    const unread = demoEmails.filter((e) => e.unread);
+    const { data: emails, live } = await getEmails();
+    const unread = emails.filter((e) => e.unread);
+    const shown = unread.length ? unread : emails.slice(0, 3);
     return {
-      tool: { name: "gmail · check_emails", result: `${unread.length} non lus` },
-      ui: { panel: "emails", payload: demoEmails },
-      text: `Vous avez **${unread.length} e-mails non lus** :\n\n${unread
+      tool: { name: "gmail · check_emails", result: `${live ? "Gmail connecté — " : ""}${unread.length} non lus` },
+      ui: { panel: "emails", payload: emails },
+      text: `Vous avez **${unread.length} e-mail${unread.length > 1 ? "s" : ""} non lu${unread.length > 1 ? "s" : ""}** :\n\n${shown
         .map((e) => `- **${e.from}** — ${e.subject} · *${e.time}*\n  ${e.preview.slice(0, 90)}…`)
-        .join("\n")}\n\nLe compte-rendu de Marie Lambert me semble prioritaire — souhaitez-vous que je vous le résume ?`,
+        .join("\n")}${live ? "" : "\n\nLe compte-rendu de Marie Lambert me semble prioritaire — souhaitez-vous que je vous le résume ?"}`,
     };
   }
 
   /* Agenda (Google Calendar) */
   if (/\b(agenda|calendrier|rendez-vous|réunions?|planning)\b|emploi du temps|ma journée|prochain rendez/.test(m)) {
-    const today = demoEvents.filter((e) => e.day === "aujourd'hui");
+    const { data: events, live } = await getEvents();
+    const today = events.filter((e) => e.day === "aujourd'hui");
+    const shown = today.length ? today : events.slice(0, 4);
     return {
-      tool: { name: "gcal · check_calendar", result: `${today.length} événements aujourd'hui` },
-      ui: { panel: "agenda", payload: demoEvents },
-      text: `Votre journée, Monsieur :\n\n${today
-        .map((e) => `- **${e.start}–${e.end}** · ${e.title} *(${e.where})*`)
-        .join("\n")}\n\nVotre créneau de deep work reste intact jusqu'à 9 h 30. Vendredi, n'oubliez pas la démo investisseurs à 10 h.`,
+      tool: { name: "gcal · check_calendar", result: `${live ? "Agenda connecté — " : ""}${today.length} événements aujourd'hui` },
+      ui: { panel: "agenda", payload: events },
+      text: `Votre ${today.length ? "journée" : "planning à venir"}, Monsieur :\n\n${shown
+        .map((e) => `- **${e.start}${e.end ? `–${e.end}` : ""}** ${e.day !== "aujourd'hui" ? `*(${e.day})* ` : ""}· ${e.title}${e.where ? ` *(${e.where})*` : ""}`)
+        .join("\n")}${live ? "" : "\n\nVotre créneau de deep work reste intact jusqu'à 9 h 30. Vendredi, n'oubliez pas la démo investisseurs à 10 h."}`,
     };
   }
 
   /* Slack */
   if (/\bslack\b|quoi de neuf/.test(m)) {
+    const { data: messages, live } = await getSlackMessages();
     return {
-      tool: { name: "slack · read_channels", result: `${demoSlackMessages.length} messages récents` },
-      ui: { panel: "slack", payload: demoSlackMessages },
-      text: `Le pouls de vos équipes, Monsieur :\n\n${demoSlackMessages
-        .map((s) => `- **${s.channel}** · ${s.from}, ${s.time} — ${s.text}`)
+      tool: { name: "slack · read_channels", result: `${live ? "Slack connecté — " : ""}${messages.length} ${live ? "canaux" : "messages récents"}` },
+      ui: { panel: "slack", payload: messages },
+      text: `Le pouls de vos équipes, Monsieur :\n\n${messages
+        .map((s) => `- **${s.channel}** · ${s.from}${s.time ? `, ${s.time}` : ""} — ${s.text}`)
         .join("\n")}`,
     };
   }
 
   /* Google Drive */
   if (/\bdrive\b|mes fichiers|le contrat/.test(m)) {
+    const { data: files, live } = await getDriveFiles();
     return {
-      tool: { name: "gdrive · search_files", result: `${demoDriveFiles.length} fichiers` },
-      ui: { panel: "drive", payload: demoDriveFiles },
-      text: `Voici ce que je trouve dans votre Drive :\n\n${demoDriveFiles
+      tool: { name: "gdrive · search_files", result: `${live ? "Drive connecté — " : ""}${files.length} fichiers` },
+      ui: { panel: "drive", payload: files },
+      text: `Voici ce que je trouve dans votre Drive :\n\n${files
         .map((f) => `- **${f.name}** · ${f.kind}, modifié ${f.modified}`)
-        .join("\n")}\n\nLe « Contrat prestation 2026.pdf » semble correspondre à votre recherche.`,
+        .join("\n")}${live ? "" : "\n\nLe « Contrat prestation 2026.pdf » semble correspondre à votre recherche."}`,
     };
   }
 
   /* Notion */
   if (/\bnotion\b/.test(m)) {
+    const { data: pages, live } = await getNotionPages();
     return {
-      tool: { name: "notion · search_pages", result: `${demoNotionPages.length} pages` },
-      ui: { panel: "notion", payload: demoNotionPages },
-      text: `Vos pages Notion récentes :\n\n${demoNotionPages
+      tool: { name: "notion · search_pages", result: `${live ? "Notion connecté — " : ""}${pages.length} pages` },
+      ui: { panel: "notion", payload: pages },
+      text: `Vos pages Notion récentes :\n\n${pages
         .map((p) => `- ${p.icon} **${p.title}** · modifiée ${p.edited}`)
         .join("\n")}`,
     };
@@ -239,8 +247,9 @@ async function matchIntent(raw: string): Promise<DemoReply> {
 
   /* ── Salutations ── */
   if (/^(bonjour|bonsoir|salut|hello|hey|coucou|yo)\b/.test(m) || /ça va|comment vas/.test(m)) {
-    const unread = demoEmails.filter((e) => e.unread).length;
-    const today = demoEvents.filter((e) => e.day === "aujourd'hui").length;
+    const [{ data: emails }, { data: events }] = await Promise.all([getEmails(), getEvents()]);
+    const unread = emails.filter((e) => e.unread).length;
+    const today = events.filter((e) => e.day === "aujourd'hui").length;
     return {
       text: pick([
         `Mes salutations, Monsieur. Tous mes systèmes sont opérationnels : ${unread} e-mails non lus, ${today} rendez-vous aujourd'hui. Que puis-je pour vous ?`,

@@ -3,7 +3,9 @@ import { getDb, newId, save, logActivity } from "./db/store.js";
 import { getGraph, addNode } from "./brain/graph.js";
 import { runChat, type ChatEvent } from "./ai/jarvis.js";
 import { config, hasApiKey, isDemoMode } from "./config.js";
-import { CONNECTORS, connectorData } from "./connectors/index.js";
+import { CONNECTORS, connectorPayload, connectorsWithStatus } from "./connectors/index.js";
+import { AUTH_SPECS, buildAuthorizeUrl, handleOAuthCallback, testToken } from "./connectors/auth.js";
+import { clearCreds, setCreds } from "./connectors/credstore.js";
 import { listProposals, reviewProposal } from "./selfdev/index.js";
 import { searchKnowledge } from "./memory/search.js";
 import { scheduleWikiIngest, lintWiki } from "./wiki/index.js";
@@ -24,17 +26,95 @@ api.get("/health", (_req, res) => {
 
 /* ── Connecteurs ───────────────────────────────────────────────── */
 
-api.get("/connectors", (_req, res) => {
-  res.json({ connectors: CONNECTORS });
+api.get("/connectors", async (_req, res) => {
+  res.json({ connectors: await connectorsWithStatus() });
 });
 
-api.get("/connectors/:id", (req, res) => {
-  const info = CONNECTORS.find((c) => c.id === req.params.id);
+api.get("/connectors/:id", async (req, res) => {
+  const info = (await connectorsWithStatus()).find((c) => c.id === req.params.id);
   if (!info) {
     res.status(404).json({ error: "connecteur inconnu" });
     return;
   }
-  res.json({ connector: info, data: connectorData(info.id) });
+  const payload = await connectorPayload(info.id);
+  res.json({ connector: info, data: payload?.data ?? null, live: payload?.live ?? false });
+});
+
+/**
+ * Branchement d'un connecteur.
+ *  - jeton simple : { token } → testé auprès du service puis enregistré ;
+ *  - OAuth : { clientId, clientSecret } → enregistrés, renvoie l'URL
+ *    d'autorisation à ouvrir (le callback finalise la connexion).
+ */
+api.post("/connectors/:id/credentials", async (req, res) => {
+  const id = req.params.id;
+  const spec = AUTH_SPECS[id];
+  if (!spec) {
+    res.status(404).json({ error: "connecteur inconnu" });
+    return;
+  }
+  try {
+    if (spec.kind === "token") {
+      const token = String(req.body?.token ?? "").trim();
+      if (!token) {
+        res.status(400).json({ error: "jeton requis" });
+        return;
+      }
+      const { account, verified } = await testToken(id, token);
+      setCreds(id, { token, account, connectedAt: new Date().toISOString() });
+      logActivity("connector", `Connecteur ${id} branché (${account}).`);
+      res.json({ connected: true, account, verified });
+    } else if (spec.kind === "oauth") {
+      const clientId = String(req.body?.clientId ?? "").trim();
+      const clientSecret = String(req.body?.clientSecret ?? "").trim();
+      if (!clientId || !clientSecret) {
+        res.status(400).json({ error: "clientId et clientSecret requis" });
+        return;
+      }
+      setCreds(id, { clientId, clientSecret });
+      res.json({ connected: false, authorizeUrl: buildAuthorizeUrl(id) });
+    } else {
+      res.status(400).json({ error: "rien à configurer pour ce connecteur" });
+    }
+  } catch (err) {
+    res.status(422).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/** Retour OAuth du fournisseur : échange du code puis petite page de succès. */
+api.get("/connectors/:id/callback", async (req, res) => {
+  const id = req.params.id;
+  const { code, state, error } = req.query as Record<string, string | undefined>;
+  const page = (title: string, detail: string, ok: boolean) =>
+    `<!doctype html><meta charset="utf-8"><title>${title}</title>
+     <body style="font-family:system-ui;background:#04070d;color:#d7f4ff;display:grid;place-items:center;height:100vh;margin:0">
+     <div style="text-align:center;max-width:420px">
+       <div style="font-size:42px">${ok ? "✓" : "✕"}</div>
+       <h2 style="letter-spacing:.06em">${title}</h2>
+       <p style="opacity:.75">${detail}</p>
+     </div>
+     ${ok ? "<script>setTimeout(()=>window.close(),1800)</script>" : ""}</body>`;
+  try {
+    if (error) throw new Error(`Autorisation refusée : ${error}`);
+    if (!code || !state) throw new Error("code ou state manquant dans le retour OAuth");
+    await handleOAuthCallback(id, code, state);
+    logActivity("connector", `Connecteur ${id} autorisé via OAuth.`);
+    res.send(page("Connecté", "Autorisation réussie — vous pouvez fermer cet onglet et retourner dans JARVIS.", true));
+  } catch (err) {
+    res
+      .status(400)
+      .send(page("Échec de connexion", err instanceof Error ? err.message : String(err), false));
+  }
+});
+
+api.post("/connectors/:id/disconnect", (req, res) => {
+  if (!CONNECTORS.some((c) => c.id === req.params.id)) {
+    res.status(404).json({ error: "connecteur inconnu" });
+    return;
+  }
+  clearCreds(req.params.id);
+  logActivity("connector", `Connecteur ${req.params.id} débranché.`);
+  res.json({ connected: false });
 });
 
 api.get("/models", (_req, res) => {

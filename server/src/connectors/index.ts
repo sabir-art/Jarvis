@@ -105,20 +105,78 @@ export const demoCreative = {
   ],
 };
 
-export function connectorData(id: string): unknown {
+/**
+ * Données d'un connecteur : réelles quand le service est branché (via le
+ * module `live`), sinon la démo. `live` indique la provenance au client.
+ */
+export async function connectorPayload(id: string): Promise<{ data: unknown; live: boolean } | null> {
+  const { getEmails, getEvents, getDriveFiles, getTracks, getNotionPages, getSlackMessages } = await import(
+    "./live.js"
+  );
   switch (id) {
-    case "gmail": return { emails: demoEmails };
-    case "gcal": return { events: demoEvents };
-    case "gdrive": return { files: demoDriveFiles };
-    case "spotify": return demoTracks;
-    case "notion": return { pages: demoNotionPages };
-    case "slack": return { messages: demoSlackMessages };
-    case "figma": return { files: demoFigmaFiles };
-    case "adobe": return { assets: demoCreative.adobe };
-    case "higgsfield": return { jobs: demoCreative.higgsfield };
-    case "runware": return { jobs: demoCreative.runware };
-    case "webflow": return { site: demoCreative.webflow };
-    case "chrome": return { history: demoCreative.chrome };
+    case "gmail": {
+      const r = await getEmails();
+      return { data: { emails: r.data }, live: r.live };
+    }
+    case "gcal": {
+      const r = await getEvents();
+      return { data: { events: r.data }, live: r.live };
+    }
+    case "gdrive": {
+      const r = await getDriveFiles();
+      return { data: { files: r.data }, live: r.live };
+    }
+    case "spotify": {
+      const r = await getTracks();
+      return { data: r.data, live: r.live };
+    }
+    case "notion": {
+      const r = await getNotionPages();
+      return { data: { pages: r.data }, live: r.live };
+    }
+    case "slack": {
+      const r = await getSlackMessages();
+      return { data: { messages: r.data }, live: r.live };
+    }
+    case "figma": return { data: { files: demoFigmaFiles }, live: false };
+    case "adobe": return { data: { assets: demoCreative.adobe }, live: false };
+    case "higgsfield": return { data: { jobs: demoCreative.higgsfield }, live: false };
+    case "runware": return { data: { jobs: demoCreative.runware }, live: false };
+    case "webflow": return { data: { site: demoCreative.webflow }, live: false };
+    case "chrome": return { data: { history: demoCreative.chrome }, live: false };
     default: return null;
   }
+}
+
+/**
+ * Liste des connecteurs enrichie de l'état de connexion réel et de la
+ * marche à suivre pour se brancher (affichée dans le panneau Connecter).
+ * Les secrets ne quittent jamais le serveur.
+ */
+export async function connectorsWithStatus(): Promise<
+  (ConnectorInfo & {
+    auth: { kind: string; label?: string; placeholder?: string; helpUrl?: string; steps: string[]; liveData: boolean; redirectUri?: string };
+    account?: string;
+  })[]
+> {
+  const { AUTH_SPECS, redirectUri } = await import("./auth.js");
+  const { isConnected, getCreds } = await import("./credstore.js");
+  return CONNECTORS.map((c) => {
+    const spec = AUTH_SPECS[c.id];
+    const connected = isConnected(c.id);
+    return {
+      ...c,
+      status: connected ? ("connected" as const) : c.status,
+      account: connected ? getCreds(c.id)?.account : undefined,
+      auth: {
+        kind: spec?.kind ?? "token",
+        label: spec?.label,
+        placeholder: spec?.placeholder,
+        helpUrl: spec?.helpUrl,
+        steps: spec?.steps ?? [],
+        liveData: spec?.liveData ?? false,
+        redirectUri: spec?.kind === "oauth" ? redirectUri(c.id) : undefined,
+      },
+    };
+  });
 }

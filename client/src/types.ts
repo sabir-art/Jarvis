@@ -91,10 +91,25 @@ export type OrbState = "idle" | "listening" | "thinking" | "speaking";
 
 export type ViewName = "home" | "brain" | "wiki" | "connectors" | "tasks" | "autodev";
 
+export interface ConnectorAuth {
+  kind: "token" | "oauth" | "local";
+  label?: string;
+  placeholder?: string;
+  helpUrl?: string;
+  steps: string[];
+  /** vraies données servies une fois connecté */
+  liveData: boolean;
+  /** URI de redirection à déclarer chez le fournisseur (OAuth) */
+  redirectUri?: string;
+}
+
 export interface ConnectorInfo {
   id: string;
   name: string;
   tagline: string;
   status: "demo" | "connected" | "available";
   examples: string[];
+  auth: ConnectorAuth;
+  /** libellé du compte connecté (e-mail, workspace…) */
+  account?: string;
 }

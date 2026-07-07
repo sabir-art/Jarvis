@@ -69,6 +69,7 @@ interface JarvisState {
   bootstrap: () => Promise<void>;
   refreshPanels: () => Promise<void>;
   refreshGraph: () => Promise<void>;
+  refreshConnectors: () => Promise<void>;
 }
 
 let uid = 0;
@@ -276,6 +277,11 @@ export const useJarvis = create<JarvisState>((set, get) => ({
       proposals: proposals.proposals,
       wikiPages: wiki.pages,
     });
+  },
+
+  refreshConnectors: async () => {
+    const conn = await getJSON<{ connectors: ConnectorInfo[] }>("/api/connectors");
+    set({ connectors: conn.connectors });
   },
 
   bootstrap: async () => {

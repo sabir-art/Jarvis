@@ -862,6 +862,66 @@ button { font-family: inherit; }
 .sheet-body { min-height: 120px; }
 .sheet-foot { margin-top: 16px; color: var(--text-3); font-size: 11.5px; }
 
+/* ── Branchement d'un connecteur (jeton / OAuth) ── */
+.connect-box {
+  margin: 14px 0 6px;
+  padding: 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: rgba(53, 197, 255, 0.04);
+}
+.connect-box h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.connect-steps {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.connect-help {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.connect-help:hover { text-decoration: underline; }
+.connect-form { display: flex; gap: 8px; }
+.connect-form.column { flex-direction: column; }
+.connect-form input {
+  flex: 1;
+  background: rgba(4, 10, 16, 0.6);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  padding: 9px 12px;
+  color: var(--text-1);
+  font-size: 13px;
+  font-family: inherit;
+}
+.connect-form input:focus { outline: none; border-color: var(--accent); }
+.redirect-uri { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 11.5px; }
+.redirect-uri code {
+  padding: 7px 10px;
+  border: 1px dashed var(--hairline);
+  border-radius: 8px;
+  color: var(--accent);
+  cursor: copy;
+  word-break: break-all;
+  font-size: 11.5px;
+}
+.connect-status { margin-top: 10px; font-size: 12.5px; color: var(--text-2); }
+.connect-status.ok { color: var(--ok); margin-top: 0; margin-bottom: 10px; }
+.connect-status.err { color: var(--danger); }
+.btn.danger { color: var(--danger); border-color: rgba(255, 125, 138, 0.3); }
+
 .data-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .data-list li { padding: 11px 2px; border-bottom: 1px solid var(--hairline); }
 .data-list li:last-child { border-bottom: none; }

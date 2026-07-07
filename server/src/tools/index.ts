@@ -321,6 +321,97 @@ const builtinTools: JarvisTool[] = [
   },
 ];
 
+/* ── Outils connecteurs ─────────────────────────────────────────────
+   Servent les données réelles quand le service est branché (panneau
+   Connecteurs), sinon la démo — dans les deux cas ils ouvrent le popup. */
+
+function connectorTool(
+  name: string,
+  description: string,
+  panel: string,
+  fetcher: () => Promise<{ data: unknown; live: boolean }>,
+  summarize: (data: never, live: boolean) => string,
+): JarvisTool {
+  return {
+    definition: { name, description, input_schema: { type: "object", properties: {} } },
+    handler: async () => {
+      const { data, live } = await fetcher();
+      return {
+        result: `${summarize(data as never, live)}${live ? "" : " (démo — service non connecté)"}`,
+        ui: { panel, payload: data },
+      };
+    },
+  };
+}
+
+const connectorTools: JarvisTool[] = [
+  connectorTool(
+    "check_emails",
+    "Lit la boîte de réception de l'utilisateur (Gmail). À utiliser quand il demande ses e-mails ou messages.",
+    "emails",
+    async () => {
+      const { getEmails } = await import("../connectors/live.js");
+      return getEmails();
+    },
+    (emails: { from: string; subject: string; unread: boolean; time: string }[]) =>
+      emails.map((e) => `${e.unread ? "● " : ""}${e.from} — ${e.subject} (${e.time})`).join("\n"),
+  ),
+  connectorTool(
+    "check_calendar",
+    "Consulte l'agenda de l'utilisateur (Google Calendar) : rendez-vous du jour et à venir.",
+    "agenda",
+    async () => {
+      const { getEvents } = await import("../connectors/live.js");
+      return getEvents();
+    },
+    (events: { title: string; start: string; end: string; day: string; where: string }[]) =>
+      events.map((e) => `${e.day} ${e.start}${e.end ? `–${e.end}` : ""} · ${e.title}${e.where ? ` (${e.where})` : ""}`).join("\n"),
+  ),
+  connectorTool(
+    "search_drive",
+    "Liste les fichiers récents du Google Drive de l'utilisateur.",
+    "drive",
+    async () => {
+      const { getDriveFiles } = await import("../connectors/live.js");
+      return getDriveFiles();
+    },
+    (files: { name: string; kind: string; modified: string }[]) =>
+      files.map((f) => `${f.name} · ${f.kind}, ${f.modified}`).join("\n"),
+  ),
+  connectorTool(
+    "spotify_status",
+    "Musique (Spotify) : lecture en cours, playlists de l'utilisateur.",
+    "spotify",
+    async () => {
+      const { getTracks } = await import("../connectors/live.js");
+      return getTracks();
+    },
+    (t: { nowPlaying: { title: string; artist: string }; playlists: { name: string; tracks: number }[] }) =>
+      `En lecture : ${t.nowPlaying.title} — ${t.nowPlaying.artist}\nPlaylists : ${t.playlists.map((p) => `${p.name} (${p.tracks})`).join(", ")}`,
+  ),
+  connectorTool(
+    "read_slack",
+    "Consulte les canaux Slack de l'utilisateur (activité récente).",
+    "slack",
+    async () => {
+      const { getSlackMessages } = await import("../connectors/live.js");
+      return getSlackMessages();
+    },
+    (msgs: { channel: string; from: string; text: string }[]) =>
+      msgs.map((s) => `${s.channel} · ${s.from} — ${s.text}`).join("\n"),
+  ),
+  connectorTool(
+    "search_notion",
+    "Liste les pages Notion récentes de l'utilisateur.",
+    "notion",
+    async () => {
+      const { getNotionPages } = await import("../connectors/live.js");
+      return getNotionPages();
+    },
+    (pages: { title: string; edited: string }[]) => pages.map((p) => `${p.title} · ${p.edited}`).join("\n"),
+  ),
+];
+
 /** Outils actifs = outils natifs + compétences approuvées (auto-dev). */
 export function activeTools(): JarvisTool[] {
   const dynamic: JarvisTool[] = approvedSkills().map((skill) => ({
@@ -340,5 +431,5 @@ export function activeTools(): JarvisTool[] {
       }
     },
   }));
-  return [...builtinTools, ...dynamic];
+  return [...builtinTools, ...connectorTools, ...dynamic];
 }
