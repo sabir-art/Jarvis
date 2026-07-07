@@ -538,18 +538,25 @@ export const useJarvis = create<JarvisState>((set, get) => ({
   },
 
   bootstrap: async () => {
-    try {
-      const health = await getJSON<{ apiKeyConfigured: boolean; demoMode: boolean }>("/api/health");
-      set({ apiKeyConfigured: health.apiKeyConfigured, demoMode: health.demoMode });
-      const conn = await getJSON<{ connectors: ConnectorInfo[] }>("/api/connectors");
-      set({ connectors: conn.connectors });
-      maybeStartPlayer(conn.connectors, set);
-      const msgs = await getJSON<{ messages: UIMessage[] }>("/api/messages");
-      set({ messages: msgs.messages });
-      await Promise.all([get().refreshGraph(), get().refreshPanels()]);
-    } catch {
-      set({ apiKeyConfigured: false });
+    // Au premier lancement, Vite démarre avant le serveur (compilation
+    // tsx) : on réessaie quelques secondes au lieu d'afficher un état
+    // bancal qui exigerait un rechargement manuel.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        const health = await getJSON<{ apiKeyConfigured: boolean; demoMode: boolean }>("/api/health");
+        set({ apiKeyConfigured: health.apiKeyConfigured, demoMode: health.demoMode });
+        const conn = await getJSON<{ connectors: ConnectorInfo[] }>("/api/connectors");
+        set({ connectors: conn.connectors });
+        maybeStartPlayer(conn.connectors, set);
+        const msgs = await getJSON<{ messages: UIMessage[] }>("/api/messages");
+        set({ messages: msgs.messages });
+        await Promise.all([get().refreshGraph(), get().refreshPanels()]);
+        return;
+      } catch {
+        await new Promise((r) => setTimeout(r, 1200));
+      }
     }
+    set({ apiKeyConfigured: false });
   },
 }));
 
