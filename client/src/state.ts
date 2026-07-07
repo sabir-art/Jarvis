@@ -90,8 +90,9 @@ function speakable(md: string): string {
 let utteranceSeq = 0;
 let currentAudio: HTMLAudioElement | null = null;
 
-/** Coupe toute parole en cours (audio neuronal comme voix navigateur). */
+/** Coupe toute parole en cours (audio neuronal, flux, voix navigateur). */
 function stopSpeech(): void {
+  utteranceSeq++; // invalide les flux/paroles en cours
   if (currentAudio) {
     currentAudio.onended = null;
     currentAudio.onerror = null;
@@ -187,6 +188,182 @@ function speak(text: string): void {
   })();
 }
 
+/**
+ * Parole en flux : JARVIS commence à parler dès la première phrase écrite,
+ * sans attendre la fin de la réponse. Le texte streamé est découpé en
+ * phrases ; chacune est synthétisée (voix neuronale, repli navigateur) et
+ * jouée dans l'ordre — la synthèse de la phrase suivante se prépare pendant
+ * que la précédente se joue.
+ */
+function createSpeechStream(): { push: (delta: string) => void; end: () => void } {
+  stopSpeech();
+  const id = ++utteranceSeq;
+
+  let textBuf = "";
+  let chunkIndex = 0;
+  let inputDone = false;
+  let pumping = false;
+  let anyStarted = false;
+  let neuralOk: boolean | null = null; // null = pas encore su
+  const chunks: string[] = [];
+  let playChain: Promise<void> = Promise.resolve();
+
+  const begin = () => {
+    if (id !== utteranceSeq || anyStarted) return;
+    anyStarted = true;
+    useJarvis.getState().setOrbState("speaking");
+    window.dispatchEvent(new CustomEvent("jarvis-tts-start"));
+  };
+  const finishAll = () => {
+    if (id !== utteranceSeq) return;
+    const s = useJarvis.getState();
+    s.setOrbState(s.streaming ? "thinking" : "idle");
+    window.dispatchEvent(new CustomEvent("jarvis-tts-end"));
+  };
+
+  /** Synthèse d'un morceau : URL audio neuronale, ou null (voix navigateur). */
+  const fetchChunk = async (text: string): Promise<string | null> => {
+    if (neuralOk === false) return null;
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok || res.status === 204 || !res.headers.get("content-type")?.includes("audio")) {
+        neuralOk = false;
+        return null;
+      }
+      neuralOk = true;
+      return URL.createObjectURL(await res.blob());
+    } catch {
+      neuralOk = false;
+      return null;
+    }
+  };
+
+  const playItem = (url: string | null, text: string): Promise<void> =>
+    new Promise((resolve) => {
+      if (id !== utteranceSeq) {
+        if (url) URL.revokeObjectURL(url);
+        resolve();
+        return;
+      }
+      if (url) {
+        const audio = new Audio(url);
+        currentAudio = audio;
+        const done = () => {
+          URL.revokeObjectURL(url);
+          if (currentAudio === audio) currentAudio = null;
+          resolve();
+        };
+        audio.onplay = begin;
+        audio.onended = done;
+        audio.onerror = done;
+        void audio.play().catch(done);
+        return;
+      }
+      if (!("speechSynthesis" in window)) {
+        resolve();
+        return;
+      }
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.lang = "fr-FR";
+      utt.rate = 1.02;
+      utt.pitch = 0.9;
+      const voice = window.speechSynthesis
+        .getVoices()
+        .find((v) => v.lang.startsWith("fr") && /google|natural|premium|enhanced|siri/i.test(v.name));
+      if (voice) utt.voice = voice;
+      let started = false;
+      utt.onstart = () => {
+        started = true;
+        begin();
+      };
+      utt.onend = () => resolve();
+      utt.onerror = () => resolve();
+      window.speechSynthesis.speak(utt);
+      window.setTimeout(() => {
+        if (!started) resolve(); // pas de moteur TTS : on n'attend pas
+      }, 2500);
+    });
+
+  /** Boucle : synthétise les morceaux dans l'ordre, en avance sur la lecture. */
+  const pump = async () => {
+    if (pumping) return;
+    pumping = true;
+    while (id === utteranceSeq) {
+      const text = chunks.shift();
+      if (text === undefined) {
+        if (inputDone) break;
+        await new Promise((r) => setTimeout(r, 100));
+        continue;
+      }
+      const url = await fetchChunk(text); // séquentiel : l'ordre est garanti
+      if (id !== utteranceSeq) {
+        if (url) URL.revokeObjectURL(url);
+        break;
+      }
+      playChain = playChain.then(() => playItem(url, text));
+    }
+    await playChain;
+    pumping = false;
+    if (id === utteranceSeq && inputDone && chunks.length === 0) finishAll();
+  };
+
+  /** Découpe le tampon en phrases prêtes à dire. */
+  const extract = (force: boolean) => {
+    for (;;) {
+      // première phrase : on part vite (dès ~40 caractères) ; ensuite on
+      // groupe (~180) pour limiter les allers-retours de synthèse
+      const minLen = chunkIndex === 0 ? 40 : 180;
+      let cut = -1;
+      const re = /[.!?…]["»)]?\s|\n+/g;
+      let match: RegExpExecArray | null;
+      while ((match = re.exec(textBuf))) {
+        if (match.index + 1 >= minLen) {
+          cut = match.index + match[0].length;
+          break;
+        }
+      }
+      if (cut === -1 && textBuf.length > 420) {
+        const space = textBuf.lastIndexOf(" ", 400);
+        cut = space > 200 ? space + 1 : 400;
+      }
+      if (cut === -1) break;
+      const piece = speakable(textBuf.slice(0, cut));
+      textBuf = textBuf.slice(cut);
+      if (piece) {
+        chunks.push(piece);
+        chunkIndex++;
+      }
+    }
+    if (force) {
+      const piece = speakable(textBuf);
+      textBuf = "";
+      if (piece) {
+        chunks.push(piece);
+        chunkIndex++;
+      }
+    }
+  };
+
+  return {
+    push: (delta) => {
+      if (id !== utteranceSeq) return;
+      textBuf += delta;
+      extract(false);
+      if (chunks.length) void pump();
+    },
+    end: () => {
+      if (id !== utteranceSeq) return;
+      inputDone = true;
+      extract(true);
+      void pump();
+    },
+  };
+}
+
 export const useJarvis = create<JarvisState>((set, get) => ({
   view: "home",
   setView: (v) => set({ view: v }),
@@ -259,6 +436,10 @@ export const useJarvis = create<JarvisState>((set, get) => ({
         messages: s.messages.map((m) => (m.id === draft.id ? { ...m, ...patch } : m)),
       }));
 
+    // À l'oral : on répond à l'oral. Au clavier : seulement si activé.
+    // La parole démarre dès la première phrase, sans attendre la fin.
+    const speech = viaVoice || get().ttsEnabled ? createSpeechStream() : null;
+
     await streamChat(
       { message: text, modelOverride: get().modelChoice, images },
       {
@@ -266,12 +447,14 @@ export const useJarvis = create<JarvisState>((set, get) => ({
           set({ activeModel: meta.model, activeModelReason: meta.reason });
           patchDraft({ model: meta.model, modelReason: meta.reason });
         },
-        onText: (delta) =>
+        onText: (delta) => {
+          speech?.push(delta);
           set((s) => ({
             messages: s.messages.map((m) =>
               m.id === draft.id ? { ...m, content: m.content + delta } : m,
             ),
-          })),
+          }));
+        },
         onToolStart: (name) =>
           set((s) => ({
             toolActivity: [...s.toolActivity.filter((t) => t.name !== name), { name, status: "running" }],
@@ -287,18 +470,18 @@ export const useJarvis = create<JarvisState>((set, get) => ({
         onUi: (panel, payload) => set({ popup: { panel, payload } }),
         onDone: (_id, toolsUsed) => {
           patchDraft({ streaming: false, toolsUsed });
-          const finalText = get().messages.find((m) => m.id === draft.id)?.content ?? "";
-          // À l'oral : on répond à l'oral. Au clavier : seulement si activé.
-          if ((viaVoice || get().ttsEnabled) && finalText) speak(speakable(finalText));
+          speech?.end();
         },
-        onError: (message) =>
+        onError: (message) => {
+          speech?.end();
           set((s) => ({
             messages: s.messages.map((m) =>
               m.id === draft.id
                 ? { ...m, streaming: false, content: m.content || `⚠️ ${message}` }
                 : m,
             ),
-          })),
+          }));
+        },
       },
     ).catch(() => {
       patchDraft({ streaming: false, content: "⚠️ Liaison au serveur impossible." });

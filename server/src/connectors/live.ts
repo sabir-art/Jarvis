@@ -239,8 +239,25 @@ async function liveSlackMessages(): Promise<typeof demoSlackMessages> {
 /* ── Spotify : commande du lecteur (recherche + lecture) ───────── */
 
 export type PlayOutcome =
-  | { ok: true; kind: "track" | "playlist" | "resume"; label: string; artist?: string; device: string }
-  | { ok: false; reason: "no_device" | "premium_required" | "not_found" | "error"; detail?: string };
+  | { ok: true; kind: "track" | "playlist" | "resume"; label: string; artist?: string; device: string; launched?: boolean }
+  | { ok: false; reason: "no_device" | "premium_required" | "not_found" | "error"; detail?: string; launched?: boolean };
+
+/**
+ * Ouvre l'application Spotify sur CETTE machine (le serveur JARVIS tourne
+ * en local, sur le même ordinateur que l'utilisateur).
+ */
+async function launchSpotifyApp(): Promise<boolean> {
+  const { exec } = await import("node:child_process");
+  const cmd =
+    process.platform === "darwin"
+      ? "open -a Spotify"
+      : process.platform === "win32"
+        ? "start spotify:"
+        : "(spotify >/dev/null 2>&1 &) || xdg-open spotify: >/dev/null 2>&1";
+  return await new Promise((resolve) => {
+    exec(cmd, (err) => resolve(!err));
+  });
+}
 
 async function spotifyCall(
   token: string,
@@ -279,8 +296,15 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
 
   try {
     /* appareil cible : actif de préférence, sinon le premier vu */
-    const devices = await spotifyCall(token, "/me/player/devices");
-    if (devices.status === 401 || devices.status === 403) {
+    const findDevice = async () => {
+      const devices = await spotifyCall(token, "/me/player/devices");
+      if (devices.status === 401 || devices.status === 403) return "unauthorized" as const;
+      const list = (devices.body.devices as { id: string; name: string; is_active: boolean }[]) ?? [];
+      return list.find((d) => d.is_active) ?? list[0] ?? null;
+    };
+
+    let device = await findDevice();
+    if (device === "unauthorized") {
       // jeton acquis avant l'ajout du droit « commande du lecteur »
       return {
         ok: false,
@@ -289,9 +313,21 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
           "Spotify doit être ré-autorisé (nouveau droit : commande du lecteur). Connecteurs → Spotify → « Ré-autoriser ».",
       };
     }
-    const list = (devices.body.devices as { id: string; name: string; is_active: boolean }[]) ?? [];
-    const device = list.find((d) => d.is_active) ?? list[0];
-    if (!device) return { ok: false, reason: "no_device" };
+
+    /* aucun lecteur visible : on ouvre l'application Spotify nous-mêmes,
+       puis on attend qu'elle s'annonce auprès de Spotify Connect */
+    let launched = false;
+    if (!device) {
+      launched = await launchSpotifyApp();
+      if (launched) {
+        for (let i = 0; i < 8 && !device; i++) {
+          await new Promise((r) => setTimeout(r, 1500));
+          const found = await findDevice();
+          if (found !== "unauthorized" && found) device = found;
+        }
+      }
+    }
+    if (!device) return { ok: false, reason: "no_device", launched };
     const dev = `?device_id=${device.id}`;
 
     const wantsPlaylist = /playlist/i.test(query);
@@ -321,15 +357,20 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
       play = { kind: "resume", label: "lecture" }; // reprise simple
     }
 
-    const res = await spotifyCall(token, `/me/player/play${dev}`, { method: "PUT", body: play.body });
-    if (res.status === 403) return { ok: false, reason: "premium_required" };
+    let res = await spotifyCall(token, `/me/player/play${dev}`, { method: "PUT", body: play.body });
+    if (launched && res.status === 404) {
+      // l'app vient de s'ouvrir : on lui laisse un instant et on réessaie
+      await new Promise((r) => setTimeout(r, 2500));
+      res = await spotifyCall(token, `/me/player/play${dev}`, { method: "PUT", body: play.body });
+    }
+    if (res.status === 403) return { ok: false, reason: "premium_required", launched };
     if (res.status >= 400) {
       const msg = (res.body.error as { message?: string })?.message ?? `HTTP ${res.status}`;
-      if (/premium/i.test(msg)) return { ok: false, reason: "premium_required" };
-      if (/device/i.test(msg)) return { ok: false, reason: "no_device" };
-      return { ok: false, reason: "error", detail: msg };
+      if (/premium/i.test(msg)) return { ok: false, reason: "premium_required", launched };
+      if (/device/i.test(msg)) return { ok: false, reason: "no_device", launched };
+      return { ok: false, reason: "error", detail: msg, launched };
     }
-    return { ok: true, kind: play.kind, label: play.label, artist: play.artist, device: device.name };
+    return { ok: true, kind: play.kind, label: play.label, artist: play.artist, device: device.name, launched };
   } catch (err) {
     return { ok: false, reason: "error", detail: err instanceof Error ? err.message : String(err) };
   }
