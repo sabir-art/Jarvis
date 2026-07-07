@@ -83,6 +83,18 @@ api.post("/connectors/:id/credentials", async (req, res) => {
   }
 });
 
+/**
+ * Ré-autorisation OAuth avec le client ID/secret déjà enregistrés — utile
+ * quand les droits demandés évoluent (ex. commande du lecteur Spotify).
+ */
+api.post("/connectors/:id/reauthorize", (req, res) => {
+  try {
+    res.json({ authorizeUrl: buildAuthorizeUrl(req.params.id) });
+  } catch (err) {
+    res.status(422).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 /** Retour OAuth du fournisseur : échange du code puis petite page de succès. */
 api.get("/connectors/:id/callback", async (req, res) => {
   const id = req.params.id;

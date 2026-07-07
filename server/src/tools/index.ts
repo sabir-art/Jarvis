@@ -389,6 +389,45 @@ const connectorTools: JarvisTool[] = [
     (t: { nowPlaying: { title: string; artist: string }; playlists: { name: string; tracks: number }[] }) =>
       `En lecture : ${t.nowPlaying.title} — ${t.nowPlaying.artist}\nPlaylists : ${t.playlists.map((p) => `${p.name} (${p.tracks})`).join(", ")}`,
   ),
+  {
+    definition: {
+      name: "play_music",
+      description:
+        "Lance réellement la musique sur Spotify : piste, artiste ou playlist. À utiliser quand l'utilisateur demande de jouer/mettre de la musique. Query vide = reprendre la lecture.",
+      input_schema: {
+        type: "object",
+        properties: { query: { type: "string", description: "Piste, artiste ou playlist demandée (ex. « playlist focus », « Solaris »)." } },
+      },
+    },
+    handler: async (input) => {
+      const { playOnSpotify, getTracks } = await import("../connectors/live.js");
+      const { isConnected } = await import("../connectors/credstore.js");
+      const { data: tracks } = await getTracks();
+      if (!isConnected("spotify")) {
+        return {
+          result: "Spotify n'est pas connecté (lecture simulée). L'utilisateur peut le brancher dans Connecteurs.",
+          ui: { panel: "spotify", payload: { ...tracks, playing: tracks.playlists[0] } },
+        };
+      }
+      const outcome = await playOnSpotify(str(input, "query"));
+      if (!outcome.ok) {
+        const reasons: Record<string, string> = {
+          no_device: "Aucun appareil Spotify actif — demander à l'utilisateur d'ouvrir l'app Spotify.",
+          premium_required: "La commande à distance exige Spotify Premium.",
+          not_found: "Aucun résultat pour cette recherche Spotify.",
+        };
+        return { result: reasons[outcome.reason] ?? `Échec Spotify : ${outcome.detail}`, isError: true, ui: { panel: "spotify", payload: tracks } };
+      }
+      const payload =
+        outcome.kind === "track"
+          ? { ...tracks, nowPlaying: { title: outcome.label, artist: outcome.artist ?? "", album: "" } }
+          : tracks;
+      return {
+        result: `Lecture lancée sur « ${outcome.device} » : ${outcome.label}${outcome.artist ? ` — ${outcome.artist}` : ""}.`,
+        ui: { panel: "spotify", payload },
+      };
+    },
+  },
   connectorTool(
     "read_slack",
     "Consulte les canaux Slack de l'utilisateur (activité récente).",

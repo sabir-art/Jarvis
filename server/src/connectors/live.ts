@@ -236,6 +236,105 @@ async function liveSlackMessages(): Promise<typeof demoSlackMessages> {
   return out;
 }
 
+/* ── Spotify : commande du lecteur (recherche + lecture) ───────── */
+
+export type PlayOutcome =
+  | { ok: true; kind: "track" | "playlist" | "resume"; label: string; artist?: string; device: string }
+  | { ok: false; reason: "no_device" | "premium_required" | "not_found" | "error"; detail?: string };
+
+async function spotifyCall(
+  token: string,
+  path: string,
+  init?: RequestInit,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(`https://api.spotify.com/v1${path}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init?.headers },
+      signal: ctrl.signal,
+    });
+    const text = await res.text();
+    let body: Record<string, unknown> = {};
+    try {
+      body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      /* réponses vides (204) */
+    }
+    return { status: res.status, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Lance réellement la musique sur Spotify : trouve la piste ou la playlist
+ * demandée, puis démarre la lecture sur l'appareil actif (ou le premier
+ * disponible). Sans requête, reprend simplement la lecture.
+ */
+export async function playOnSpotify(query: string): Promise<PlayOutcome> {
+  const token = await getAccessToken("spotify");
+  if (!token) return { ok: false, reason: "error", detail: "non connecté" };
+
+  try {
+    /* appareil cible : actif de préférence, sinon le premier vu */
+    const devices = await spotifyCall(token, "/me/player/devices");
+    if (devices.status === 401 || devices.status === 403) {
+      // jeton acquis avant l'ajout du droit « commande du lecteur »
+      return {
+        ok: false,
+        reason: "error",
+        detail:
+          "Spotify doit être ré-autorisé (nouveau droit : commande du lecteur). Connecteurs → Spotify → « Ré-autoriser ».",
+      };
+    }
+    const list = (devices.body.devices as { id: string; name: string; is_active: boolean }[]) ?? [];
+    const device = list.find((d) => d.is_active) ?? list[0];
+    if (!device) return { ok: false, reason: "no_device" };
+    const dev = `?device_id=${device.id}`;
+
+    const wantsPlaylist = /playlist/i.test(query);
+    const q = query.trim();
+
+    let play: { body?: string; kind: "track" | "playlist" | "resume"; label: string; artist?: string } | null = null;
+    if (q) {
+      const type = wantsPlaylist ? "playlist" : "track,playlist";
+      const search = await spotifyCall(token, `/search?q=${encodeURIComponent(q)}&type=${type}&limit=5`);
+      const tracks = ((search.body.tracks as { items?: Record<string, unknown>[] })?.items ?? []).filter(Boolean);
+      const playlists = ((search.body.playlists as { items?: Record<string, unknown>[] })?.items ?? []).filter(Boolean);
+      if (!wantsPlaylist && tracks.length > 0) {
+        const t = tracks[0];
+        play = {
+          body: JSON.stringify({ uris: [t.uri] }),
+          kind: "track",
+          label: String(t.name),
+          artist: ((t.artists as { name: string }[]) ?? []).map((a) => a.name).join(", "),
+        };
+      } else if (playlists.length > 0) {
+        const p = playlists[0];
+        play = { body: JSON.stringify({ context_uri: p.uri }), kind: "playlist", label: String(p.name) };
+      } else {
+        return { ok: false, reason: "not_found" };
+      }
+    } else {
+      play = { kind: "resume", label: "lecture" }; // reprise simple
+    }
+
+    const res = await spotifyCall(token, `/me/player/play${dev}`, { method: "PUT", body: play.body });
+    if (res.status === 403) return { ok: false, reason: "premium_required" };
+    if (res.status >= 400) {
+      const msg = (res.body.error as { message?: string })?.message ?? `HTTP ${res.status}`;
+      if (/premium/i.test(msg)) return { ok: false, reason: "premium_required" };
+      if (/device/i.test(msg)) return { ok: false, reason: "no_device" };
+      return { ok: false, reason: "error", detail: msg };
+    }
+    return { ok: true, kind: play.kind, label: play.label, artist: play.artist, device: device.name };
+  } catch (err) {
+    return { ok: false, reason: "error", detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /* ── Passerelle : réel si connecté, sinon démo ─────────────────── */
 
 export interface LivePayload<T> {

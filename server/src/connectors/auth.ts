@@ -90,6 +90,7 @@ export const AUTH_SPECS: Record<string, AuthSpec> = {
       "playlist-read-private",
       "user-read-recently-played",
       "user-read-playback-state",
+      "user-modify-playback-state", // lancer/reprendre la lecture
     ],
   },
   notion: {

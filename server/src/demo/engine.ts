@@ -113,14 +113,64 @@ async function matchIntent(raw: string): Promise<DemoReply> {
   /* ── 3. Consultations (connecteurs) ── */
 
   /* Musique (Spotify) — verbe impératif + objet musical, ou mention explicite de Spotify */
-  if (/\b(joue|mets?|lance|play)\b.*\b(musique|playlist|chanson|morceau|titre|spotify|son)\b/.test(m) || /\bspotify\b/.test(m) || /^\s*(de la )?musique\s*[!.]?\s*$/.test(m)) {
-    const { data: tracks, live } = await getTracks();
+  if (/\b(joue|mets?|lance|allume|play)\b.*\b(musique|music|playlist|chanson|morceau|titre|spotify|son)\b/.test(m) || /\bspotify\b/.test(m) || /^\s*(de la )?musique\s*[!.]?\s*$/.test(m)) {
+    const { isConnected } = await import("../connectors/credstore.js");
+
+    /* Spotify branché : on commande réellement le lecteur. */
+    if (isConnected("spotify")) {
+      const { playOnSpotify } = await import("../connectors/live.js");
+      // ce qui reste une fois les mots de commande retirés = la demande
+      const query = m
+        .replace(/\b(jarvis|joue|mets?|lance|allume|play|écoutez?|s'il (?:te|vous) plaît|stp|en fait|un peu)\b/g, " ")
+        .replace(/\b(la |le |les |une? |des |du |de |d'|ma |mon |mes |moi )\b/g, " ")
+        .replace(/\b(musique|music|chanson|morceau|titre|son)s?\b/g, " ")
+        .replace(/\b(dans|sur|avec)?\s*spotify\b/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const outcome = await playOnSpotify(query);
+      const { data: tracks } = await getTracks();
+
+      if (outcome.ok) {
+        const payload =
+          outcome.kind === "track"
+            ? { ...tracks, nowPlaying: { title: outcome.label, artist: outcome.artist ?? "", album: "" } }
+            : { ...tracks, playing: { name: outcome.label, tracks: 0, duration: "—" } };
+        const text =
+          outcome.kind === "track"
+            ? `À vos oreilles, Monsieur : **${outcome.label}**${outcome.artist ? ` de ${outcome.artist}` : ""} — lancé sur « ${outcome.device} ».`
+            : outcome.kind === "playlist"
+              ? `C'est parti, Monsieur : playlist **${outcome.label}** sur « ${outcome.device} ».`
+              : `Je relance la lecture sur « ${outcome.device} », Monsieur.`;
+        return {
+          tool: { name: "spotify · play_music", result: `lecture : ${outcome.label} (${outcome.device})` },
+          ui: { panel: "spotify", payload },
+          text,
+        };
+      }
+
+      const excuse =
+        outcome.reason === "no_device"
+          ? "Spotify est bien connecté, mais aucun appareil de lecture n'est visible — ouvrez l'application Spotify sur votre Mac ou votre téléphone, puis redemandez-moi."
+          : outcome.reason === "premium_required"
+            ? "Spotify réserve la commande à distance aux comptes Premium, Monsieur. Lancez la lecture manuellement — je vois ce que vous écoutez et je gère vos playlists."
+            : outcome.reason === "not_found"
+              ? `Je n'ai rien trouvé pour « ${query} » sur Spotify, Monsieur. Reformulez, ou précisez l'artiste ?`
+              : `Spotify me résiste : ${outcome.detail ?? "erreur inconnue"}.`;
+      return {
+        tool: { name: "spotify · play_music", result: `échec : ${outcome.reason}`, },
+        ui: { panel: "spotify", payload: tracks },
+        text: excuse,
+      };
+    }
+
+    /* Non branché : démo simulée. */
+    const { data: tracks } = await getTracks();
     const wanted = tracks.playlists.find((p) => m.includes(p.name.toLowerCase().split(/\s|—/)[0]));
     const playlist = wanted ?? (/focus/.test(m) ? tracks.playlists[0] : /nuit|night|coding/.test(m) ? (tracks.playlists[1] ?? tracks.playlists[0]) : tracks.playlists[0]);
     return {
-      tool: { name: "spotify · play_music", result: `${live ? "Spotify connecté — " : ""}playlist : ${playlist.name}` },
+      tool: { name: "spotify · play_music", result: `playlist : ${playlist.name}` },
       ui: { panel: "spotify", payload: { ...tracks, playing: playlist } },
-      text: `C'est parti, Monsieur : **${playlist.name}** (${playlist.tracks} titres${playlist.duration !== "—" ? `, ${playlist.duration}` : ""}). *${tracks.nowPlaying.title}* de ${tracks.nowPlaying.artist} ${live ? "est sur votre platine" : "ouvre la session"}.${tracks.queue.length ? ` Ensuite : ${tracks.queue.map((t) => `*${t.title}*`).join(", ")}.` : ""}`,
+      text: `C'est parti, Monsieur : **${playlist.name}** (${playlist.tracks} titres${playlist.duration !== "—" ? `, ${playlist.duration}` : ""}). *${tracks.nowPlaying.title}* de ${tracks.nowPlaying.artist} ouvre la session.${tracks.queue.length ? ` Ensuite : ${tracks.queue.map((t) => `*${t.title}*`).join(", ")}.` : ""} *(simulation — branchez Spotify pour la vraie lecture)*`,
     };
   }
 

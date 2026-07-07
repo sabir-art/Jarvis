@@ -114,7 +114,7 @@ function Body({ panel, payload }: { panel: string; payload: unknown }) {
               <div className="row-sub">{d.nowPlaying.artist}{d.playing ? ` · ${d.playing.name}` : ""}</div>
             </div>
           </div>
-          <div className="muted" style={{ margin: "8px 0 4px" }}>À suivre</div>
+          <div className="muted" style={{ margin: "8px 0 4px" }}>Écoutes récentes</div>
           <ul className="data-list">
             {d.queue.map((t, i) => (
               <li key={i}><div className="row-title">{t.title}</div><div className="row-sub">{t.artist}</div></li>

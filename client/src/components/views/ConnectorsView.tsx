@@ -198,6 +198,20 @@ function ConnectSection({ connector, onChanged }: { connector: ConnectorInfo; on
     }
   };
 
+  const reauthorize = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await postConnect<{ authorizeUrl: string }>(`/api/connectors/${connector.id}/reauthorize`);
+      window.open(r.authorizeUrl, "_blank", "width=560,height=720");
+      setWaitingOAuth(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (connector.status === "connected") {
     return (
       <div className="connect-box">
@@ -205,9 +219,18 @@ function ConnectSection({ connector, onChanged }: { connector: ConnectorInfo; on
           ● Connecté{connector.account && connector.account !== "clé enregistrée" ? ` — ${connector.account}` : ""}
           {!auth.liveData && <span className="muted"> · clé enregistrée, données encore simulées</span>}
         </div>
-        <button className="btn danger" onClick={disconnect} disabled={busy}>
-          Déconnecter
-        </button>
+        <div className="connect-form">
+          {auth.kind === "oauth" && (
+            <button className="btn" onClick={reauthorize} disabled={busy} title="Redemander l'autorisation (nouveaux droits)">
+              Ré-autoriser
+            </button>
+          )}
+          <button className="btn danger" onClick={disconnect} disabled={busy}>
+            Déconnecter
+          </button>
+        </div>
+        {waitingOAuth && <div className="connect-status">⟳ Autorisation en cours dans l'autre fenêtre…</div>}
+        {error && <div className="connect-status err">✕ {error}</div>}
       </div>
     );
   }
