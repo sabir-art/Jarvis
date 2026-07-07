@@ -32,7 +32,9 @@ export interface AuthSpec {
 }
 
 export function redirectUri(id: string): string {
-  return `http://localhost:${config.port}/api/connectors/${id}/callback`;
+  // 127.0.0.1 plutôt que localhost : Spotify n'accepte plus que l'adresse de
+  // bouclage littérale en HTTP (politique 2025) ; Google accepte les deux.
+  return `http://127.0.0.1:${config.port}/api/connectors/${id}/callback`;
 }
 
 const GOOGLE_STEPS = (api: string, scope: string) => [
@@ -77,8 +79,8 @@ export const AUTH_SPECS: Record<string, AuthSpec> = {
     helpUrl: "https://developer.spotify.com/dashboard",
     steps: [
       "Ouvrez developer.spotify.com/dashboard et créez une app (gratuit).",
-      "Dans les réglages de l'app, ajoutez l'URI de redirection exacte affichée ci-dessous.",
-      "Copiez le Client ID et le Client Secret ici.",
+      "Dans « Redirect URIs », collez l'URI exacte affichée ci-dessous — Spotify n'accepte que 127.0.0.1 (pas localhost) en http.",
+      "Cochez « Web API », enregistrez, puis copiez le Client ID et le Client Secret ici.",
       "Cliquez « Autoriser » : Spotify ouvre l'écran de consentement.",
     ],
     liveData: true,
