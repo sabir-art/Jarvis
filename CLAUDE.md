@@ -101,6 +101,13 @@ Vite, three.js). Branche de travail : **`claude/jarvis-ai-assistant-du60ox`**
 
 - Perfectionniste : « fais les choses comme il faut ». Jamais de version
   à moitié cassée ; livrer incrémental et fonctionnel.
+- **RÈGLE DE COMPLÉTUDE** (reproche du 07/07/2026, à ne plus jamais
+  mériter) : une capacité se livre ENTIÈRE ou pas du tout. Livrer
+  « play » sans pause/stop/suivant/volume est une faute. Avant chaque
+  livraison, se demander : « quelles sont TOUTES les actions de base
+  qu'un utilisateur attendrait de cette fonctionnalité ? » — et couvrir
+  chacune dans LES DEUX modes (outils Claude ET moteur démo), avec les
+  formulations naturelles françaises (et fautes de frappe).
 - **Rien ne doit se chevaucher** dans l'UI (reproché deux fois).
 - Compréhension libre : pas de phrase magique ; il fait des fautes de
   frappe (« vasy alumme ») — tolérance obligatoire.

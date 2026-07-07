@@ -428,6 +428,53 @@ const connectorTools: JarvisTool[] = [
       };
     },
   },
+  {
+    definition: {
+      name: "control_music",
+      description:
+        "Commande le lecteur Spotify : mettre en pause, reprendre, arrêter, passer au morceau suivant/précédent, régler le volume, ou dire ce qui joue. À utiliser dès que l'utilisateur veut agir sur la musique en cours.",
+      input_schema: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["pause", "resume", "next", "previous", "volume", "now_playing"],
+            description: "pause = pause/stop ; resume = reprendre ; volume = régler (volumePercent requis) ; now_playing = ce qui joue.",
+          },
+          volumePercent: { type: "number", description: "Volume cible 0-100 (action volume)." },
+        },
+        required: ["action"],
+      },
+    },
+    handler: async (input) => {
+      const { controlSpotify, spotifyPlayerState } = await import("../connectors/live.js");
+      const { isConnected } = await import("../connectors/credstore.js");
+      if (!isConnected("spotify")) {
+        return { result: "Spotify n'est pas connecté — la lecture est simulée, rien à commander. L'utilisateur peut le brancher dans Connecteurs." };
+      }
+      const action = str(input, "action");
+      if (action === "now_playing") {
+        const s = await spotifyPlayerState();
+        return {
+          result: s.track
+            ? `${s.playing ? "En lecture" : "En pause"} : ${s.track.title} — ${s.track.artist} (sur ${s.device?.name ?? "?"}, volume ${s.volumePercent ?? "?"}%).`
+            : "Rien ne joue actuellement.",
+          ui: { panel: "spotify", payload: { nowPlaying: s.track ?? { title: "Rien en lecture", artist: "—" }, playlists: [], queue: [] } },
+        };
+      }
+      const map: Record<string, Parameters<typeof controlSpotify>[0]> = { pause: "pause", resume: "play", next: "next", previous: "previous", volume: "volume" };
+      const out = await controlSpotify(map[action] ?? "pause", { volumePercent: Number(input.volumePercent ?? 50) });
+      if (!out.ok) return { result: `Échec : ${out.error}`, isError: true };
+      const labels: Record<string, string> = {
+        pause: "Musique mise en pause.",
+        resume: "Lecture reprise.",
+        next: "Morceau suivant.",
+        previous: "Morceau précédent.",
+        volume: `Volume réglé à ${Math.round(Number(input.volumePercent ?? 50))} %.`,
+      };
+      return { result: labels[action] ?? "Fait." };
+    },
+  },
   connectorTool(
     "read_slack",
     "Consulte les canaux Slack de l'utilisateur (activité récente).",

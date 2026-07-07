@@ -57,7 +57,90 @@ function strip(s: string): string {
 
 /* ── Réponses par domaine (réutilisées par motifs ET par score) ── */
 
+type MusicControl = "pause" | "resume" | "next" | "previous" | "volume_up" | "volume_down" | "now";
+
+/** Contrôle du lecteur (pause, suivant, volume…) — avant tout lancement. */
+function detectMusicControl(mn: string): MusicControl | null {
+  // on teste le texte normalisé ET sa forme aux lettres doublées écrasées
+  // (« arrete » ≈ « arete ») — chaque motif doit matcher l'une des deux
+  const mc = collapse(mn);
+  const t = (re: RegExp) => re.test(mn) || re.test(mc);
+  if (t(/\b(pause|arr?ete|arette|stop|stoppe|coupe|eteins|suspend)\b/)) return "pause";
+  if (t(/\b(reprend|reprends|relance|remets? (la )?(musique|lecture|le son)|continue (la )?musique)\b/)) return "resume";
+  if (t(/\b(suivante?|next|skip|passe|saute|change (de )?(musique|chanson|morceau))\b/)) return "next";
+  if (t(/\b(precedente?|previous|reviens|d'avant|remets? (la |le )?(chanson|morceau|titre) d'avant)\b/)) return "previous";
+  if (t(/\b(monte|augmente|plus fort)\b/) && t(/\b(son|volume|musique)\b/)) return "volume_up";
+  if (t(/\b(baisse?|diminue|moins fort)\b/) && t(/\b(son|volume|musique)\b/)) return "volume_down";
+  if (t(/(c.?est quoi|quel(le)? est|qu.?est[- ]?ce qui) .*(musique|chanson|morceau|titre|joue)|\bqui joue\b|en (cours de )?lecture/)) return "now";
+  return null;
+}
+
+async function replyMusicControl(ctl: MusicControl): Promise<DemoReply> {
+  const { isConnected } = await import("../connectors/credstore.js");
+  if (!isConnected("spotify")) {
+    const simulated: Record<MusicControl, string> = {
+      pause: "Musique en pause, Monsieur. *(simulation — branchez Spotify pour la vraie commande)*",
+      resume: "Je relance la lecture. *(simulation)*",
+      next: "Morceau suivant. *(simulation)*",
+      previous: "Je reviens au morceau précédent. *(simulation)*",
+      volume_up: "Volume monté. *(simulation)*",
+      volume_down: "Volume baissé. *(simulation)*",
+      now: "*Strobe* de deadmau5, Monsieur. *(simulation)*",
+    };
+    return { tool: { name: "spotify · control_music", result: ctl }, text: simulated[ctl] };
+  }
+
+  const { controlSpotify, spotifyPlayerState } = await import("../connectors/live.js");
+
+  if (ctl === "now") {
+    const s = await spotifyPlayerState();
+    return {
+      tool: { name: "spotify · now_playing", result: s.track ? s.track.title : "rien" },
+      ui: s.track ? { panel: "spotify", payload: { nowPlaying: s.track, playlists: [], queue: [] } } : undefined,
+      text: s.track
+        ? `${s.playing ? "En ce moment" : "En pause"}, Monsieur : **${s.track.title}** de ${s.track.artist}${s.device ? ` — sur « ${s.device.name} »` : ""}.`
+        : "Rien ne joue actuellement, Monsieur. Un morceau ?",
+    };
+  }
+
+  let action: "pause" | "play" | "next" | "previous" | "volume" = "pause";
+  let volumePercent: number | undefined;
+  if (ctl === "resume") action = "play";
+  else if (ctl === "next") action = "next";
+  else if (ctl === "previous") action = "previous";
+  else if (ctl === "volume_up" || ctl === "volume_down") {
+    action = "volume";
+    const s = await spotifyPlayerState();
+    const current = s.volumePercent ?? 50;
+    volumePercent = Math.min(100, Math.max(0, current + (ctl === "volume_up" ? 20 : -20)));
+  }
+
+  const out = await controlSpotify(action, { volumePercent });
+  if (!out.ok) {
+    return {
+      tool: { name: "spotify · control_music", result: `échec : ${out.error}` },
+      text: out.error === "aucune lecture en cours"
+        ? "Rien ne joue pour l'instant, Monsieur — rien à commander."
+        : `Spotify me refuse la commande : ${out.error}.`,
+    };
+  }
+  const confirmations: Record<MusicControl, string> = {
+    pause: "Musique en pause, Monsieur.",
+    resume: "La musique repart.",
+    next: "Morceau suivant.",
+    previous: "Je reviens en arrière.",
+    volume_up: `Volume monté à ${volumePercent} %.`,
+    volume_down: `Volume baissé à ${volumePercent} %.`,
+    now: "",
+  };
+  return { tool: { name: "spotify · control_music", result: ctl }, text: confirmations[ctl] };
+}
+
 async function replyMusic(m: string): Promise<DemoReply> {
+  /* d'abord : est-ce une commande du lecteur plutôt qu'un lancement ? */
+  const ctl = detectMusicControl(strip(m));
+  if (ctl) return replyMusicControl(ctl);
+
   const { isConnected } = await import("../connectors/credstore.js");
 
   /* Spotify branché : on commande réellement le lecteur. */
@@ -260,7 +343,7 @@ function detectIntent(mn: string): Intent | null {
     words.filter((x) => new RegExp(`\\b${x}`).test(mn) || new RegExp(`\\b${collapse(x)}`).test(mc)).length;
 
   const scores: [Intent, number][] = [
-    ["music", w(2, "musique", "music", "chanson", "morceau", "playlist", "spotify", "ecouter", "ecoute", "zik", "volume", "pause") + w(1, "joue", "mets", "lance", "allume", "balance", "play", "son")],
+    ["music", w(2, "musique", "music", "chanson", "morceau", "playlist", "spotify", "ecouter", "ecoute", "zik", "volume", "pause", "arrete la", "stop la", "coupe le son", "plus fort", "moins fort", "monte le son", "baisse le son") + w(1, "joue", "mets", "lance", "allume", "balance", "play", "son", "stop", "suivant", "precedent", "monte", "baisse")],
     ["emails", w(2, "mail", "mails", "email", "emails", "courriel", "courriels", "gmail", "inbox", "reception") + w(1, "boite", "recu", "recus", "message", "messages", "messagerie", "lis", "non lus")],
     ["agenda", w(2, "agenda", "calendrier", "rendez", "rdv", "reunion", "reunions", "planning", "meeting") + w(1, "journee", "semaine", "demain", "emploi du temps", "prevu", "prochain", "programme")],
     ["drive", w(3, "drive", "gdrive") + w(1, "fichier", "fichiers", "dossier", "pdf", "contrat", "tableur")],
@@ -347,6 +430,40 @@ async function matchIntent(raw: string): Promise<DemoReply> {
     };
   }
 
+  /* ── Tâche terminée (« j'ai fini X », « coche X », « marque X comme fait ») ── */
+  const doneMatch =
+    raw.match(/j\W?ai\s+(?:fini|terminé|termine|fait|réglé|regle)\s+(?:de\s+|d')?(.+)/i) ??
+    raw.match(/(?:coche|termine|marque)\s+(?:la\s+tâche\s+)?(.+?)(?:\s+comme\s+fait[e]?)?\s*$/i);
+  if (doneMatch && /\b(tache|coche|fini|termine|fait|regle)\b/.test(mn)) {
+    const q = strip(doneMatch[1]);
+    const db = getDb();
+    const task = db.tasks.find((t) => !t.done && (strip(t.title).includes(q) || q.includes(strip(t.title))));
+    if (task) {
+      return {
+        act: () => {
+          task.done = true;
+          logActivity("task", `Tâche terminée : ${task.title}`);
+          save();
+          return {
+            text: `Bien joué, Monsieur : « ${task.title} » est cochée. ${db.tasks.filter((t) => !t.done).length} tâche(s) restante(s).`,
+            ui: { panel: "tasks", payload: db.tasks.filter((t) => !t.done) },
+          };
+        },
+        text: "",
+      };
+    }
+  }
+
+  /* ── Mes notes ── */
+  if (/\b(mes|les|liste.*)\s*notes\b/.test(mn) && !/\bnote\s+que\b/.test(mn)) {
+    const notes = getDb().notes.slice(-6).reverse();
+    return {
+      text: notes.length
+        ? `Vos notes récentes, Monsieur :\n\n${notes.map((n) => `- **${n.title}**${n.tags.length ? ` · *${n.tags.join(", ")}*` : ""}`).join("\n")}\n\nDites « ouvre la note … » ou cliquez son nœud dans le cerveau pour la lire.`
+        : "Aucune note pour l'instant, Monsieur. Dites « note que… » et je m'en occupe.",
+    };
+  }
+
   /* ── 2. Salutations (avant le score : « ça va ? » n'est pas une intention) ── */
   if (/^(bonjour|bonsoir|salut|hello|hey|coucou|yo)\b[\s!,.]*$/.test(mn) || /\bca va\b|comment vas/.test(mn)) {
     const [{ data: emails }, { data: events }] = await Promise.all([getEmails(), getEvents()]);
@@ -366,6 +483,12 @@ async function matchIntent(raw: string): Promise<DemoReply> {
     return {
       text: `Avec plaisir. En quelques mots :\n\n- **Voix** — dites « Jarvis » puis votre demande, je réponds à l'oral\n- **Musique** — « mets ma playlist Focus » (vraie lecture si Spotify est branché)\n- **E-mails & agenda** — « lis mes e-mails », « mon planning ? »\n- **Notes & tâches** — « note que… », « rappelle-moi de… »\n- **Connaissance** — « que sais-tu sur le projet Alpha ? » (mon wiki compile tout)\n- **Cerveau** — chaque information devient un nœud de votre galaxie\n\n*Mode démo : sans clé API, mes réponses libres sont limitées — les connecteurs branchés, eux, sont bien réels.*`,
     };
+  }
+
+  /* ── Commandes brèves du lecteur (« stop », « pause », « suivant ») ── */
+  const terseCtl = detectMusicControl(mn);
+  if (terseCtl && mn.split(/\s+/).length <= 4) {
+    return replyMusicControl(terseCtl);
   }
 
   /* ── 4. Score d'intention : compréhension libre ── */

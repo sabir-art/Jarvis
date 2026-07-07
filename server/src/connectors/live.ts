@@ -400,11 +400,12 @@ export interface PlayerSnapshot {
   durationMs: number;
   track: { title: string; artist: string; artwork?: string } | null;
   device: { id: string; name: string } | null;
+  volumePercent: number | null;
 }
 
 /** État réel de la lecture, quel que soit l'appareil (page, app, téléphone). */
 export async function spotifyPlayerState(): Promise<PlayerSnapshot> {
-  const empty: PlayerSnapshot = { connected: false, playing: false, progressMs: 0, durationMs: 0, track: null, device: null };
+  const empty: PlayerSnapshot = { connected: false, playing: false, progressMs: 0, durationMs: 0, track: null, device: null, volumePercent: null };
   if (!isConnected("spotify")) return empty;
   const token = await getAccessToken("spotify");
   if (!token) return empty;
@@ -412,7 +413,7 @@ export async function spotifyPlayerState(): Promise<PlayerSnapshot> {
     const r = await spotifyCall(token, "/me/player");
     if (r.status === 204 || r.status >= 400) return { ...empty, connected: true };
     const item = r.body.item as Record<string, unknown> | undefined;
-    const device = r.body.device as { id: string; name: string } | undefined;
+    const device = r.body.device as { id: string; name: string; volume_percent?: number } | undefined;
     return {
       connected: true,
       playing: Boolean(r.body.is_playing),
@@ -426,13 +427,14 @@ export async function spotifyPlayerState(): Promise<PlayerSnapshot> {
           }
         : null,
       device: device ? { id: device.id, name: device.name } : null,
+      volumePercent: typeof device?.volume_percent === "number" ? device.volume_percent : null,
     };
   } catch {
     return { ...empty, connected: true };
   }
 }
 
-export type PlayerAction = "play" | "pause" | "next" | "previous" | "seek" | "transfer";
+export type PlayerAction = "play" | "pause" | "next" | "previous" | "seek" | "transfer" | "volume";
 
 /**
  * Télécommande : agit sur l'appareil en cours de lecture via l'API Web —
@@ -440,7 +442,7 @@ export type PlayerAction = "play" | "pause" | "next" | "previous" | "seek" | "tr
  */
 export async function controlSpotify(
   action: PlayerAction,
-  opts: { positionMs?: number; deviceId?: string } = {},
+  opts: { positionMs?: number; deviceId?: string; volumePercent?: number } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   const token = await getAccessToken("spotify");
   if (!token) return { ok: false, error: "Spotify non connecté" };
@@ -465,6 +467,9 @@ export async function controlSpotify(
         break;
       case "seek":
         path = `/me/player/seek?position_ms=${Math.max(0, Math.round(opts.positionMs ?? 0))}`;
+        break;
+      case "volume":
+        path = `/me/player/volume?volume_percent=${Math.min(100, Math.max(0, Math.round(opts.volumePercent ?? 50)))}`;
         break;
       case "transfer":
         if (!opts.deviceId) return { ok: false, error: "deviceId requis" };

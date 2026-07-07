@@ -103,17 +103,18 @@ api.get("/spotify/player", async (_req, res) => {
   res.json(await spotifyPlayerState());
 });
 
-/** Télécommande du lecteur : play, pause, next, previous, seek, transfer. */
+/** Télécommande du lecteur : play, pause, next, previous, seek, volume, transfer. */
 api.post("/spotify/player", async (req, res) => {
   const { controlSpotify } = await import("./connectors/live.js");
-  const { action, positionMs, deviceId } = req.body ?? {};
-  if (!["play", "pause", "next", "previous", "seek", "transfer"].includes(action)) {
+  const { action, positionMs, deviceId, volumePercent } = req.body ?? {};
+  if (!["play", "pause", "next", "previous", "seek", "transfer", "volume"].includes(action)) {
     res.status(400).json({ error: "action invalide" });
     return;
   }
   const out = await controlSpotify(action, {
     positionMs: typeof positionMs === "number" ? positionMs : undefined,
     deviceId: typeof deviceId === "string" ? deviceId : undefined,
+    volumePercent: typeof volumePercent === "number" ? volumePercent : undefined,
   });
   res.status(out.ok ? 200 : 422).json(out);
 });
