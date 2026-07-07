@@ -31,7 +31,7 @@ export default function Orb({ size = 300, onClick }: { size?: number; onClick?: 
         <div className="orb-ring" />
         <div className="orb-ring orb-ring-2" />
         <div className="orb-shimmer" />
-        <span className="orb-wordmark">Jarvis</span>
+        <span className="orb-wordmark">J.A.R.V.I.S</span>
       </div>
       <div className={`orb-status ${label ? "visible" : ""}`}>{label}</div>
     </div>

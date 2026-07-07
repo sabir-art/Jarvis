@@ -22,6 +22,12 @@ interface JarvisState {
   setView: (v: ViewName) => void;
   orbState: OrbState;
   setOrbState: (s: OrbState) => void;
+  /** popup riche ouvert par JARVIS (e-mails, agenda, note…) */
+  popup: { panel: string; payload: unknown } | null;
+  setPopup: (p: { panel: string; payload: unknown } | null) => void;
+  /** apparence de l'assistant : orbe ou hologramme */
+  persona: "orb" | "hologram";
+  setPersona: (p: "orb" | "hologram") => void;
 
   /* chat */
   messages: UIMessage[];
@@ -125,6 +131,13 @@ export const useJarvis = create<JarvisState>((set, get) => ({
   setView: (v) => set({ view: v }),
   orbState: "idle",
   setOrbState: (s) => set({ orbState: s }),
+  popup: null,
+  setPopup: (p) => set({ popup: p }),
+  persona: (localStorage.getItem("jarvis.persona") as "orb" | "hologram") ?? "orb",
+  setPersona: (p) => {
+    localStorage.setItem("jarvis.persona", p);
+    set({ persona: p });
+  },
 
   messages: [],
   streaming: false,
@@ -207,6 +220,7 @@ export const useJarvis = create<JarvisState>((set, get) => ({
           })),
         onNodeAdded: (node) =>
           set((s) => (s.nodes.some((n) => n.id === node.id) ? {} : { nodes: [...s.nodes, node] })),
+        onUi: (panel, payload) => set({ popup: { panel, payload } }),
         onDone: (_id, toolsUsed) => {
           patchDraft({ streaming: false, toolsUsed });
           const finalText = get().messages.find((m) => m.id === draft.id)?.content ?? "";

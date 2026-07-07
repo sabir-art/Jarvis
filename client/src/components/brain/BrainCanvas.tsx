@@ -367,28 +367,30 @@ function CameraRig({ layout }: { layout: GalaxyLayout }) {
   return null;
 }
 
-function GalaxyScene() {
+export function GalaxyScene({ backdrop = false }: { backdrop?: boolean }) {
   const layout = useLayout();
   const selectNode = useJarvis((s) => s.selectNode);
   return (
     <Canvas
-      camera={{ position: [0, 11, 40], fov: 50 }}
-      dpr={[1, 1.75]}
-      onPointerMissed={() => selectNode(null, false)}
+      camera={{ position: backdrop ? [0, 16, 56] : [0, 11, 40], fov: 50 }}
+      dpr={[1, backdrop ? 1.25 : 1.75]}
+      onPointerMissed={backdrop ? undefined : () => selectNode(null, false)}
     >
-      <color attach="background" args={["#04070d"]} />
+      {!backdrop && <color attach="background" args={["#04070d"]} />}
       <fog attach="fog" args={["#04070d", 45, 110]} />
-      <Stars radius={110} depth={50} count={3000} factor={3.4} saturation={0} fade speed={0.3} />
+      <Stars radius={110} depth={50} count={backdrop ? 1800 : 3000} factor={3.4} saturation={0} fade speed={0.3} />
       <SpinGroup>
         <Core />
         <Edges layout={layout} />
         <ClusterDust layout={layout} />
         <Hubs layout={layout} />
         <NodeCloud layout={layout} />
-        <NearLabels layout={layout} />
+        {!backdrop && <NearLabels layout={layout} />}
       </SpinGroup>
-      <CameraRig layout={layout} />
-      <OrbitControls makeDefault enablePan={false} minDistance={4} maxDistance={90} enableDamping dampingFactor={0.08} />
+      {!backdrop && <CameraRig layout={layout} />}
+      {!backdrop && (
+        <OrbitControls makeDefault enablePan={false} minDistance={4} maxDistance={90} enableDamping dampingFactor={0.08} />
+      )}
     </Canvas>
   );
 }

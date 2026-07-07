@@ -7,6 +7,7 @@ import { CONNECTORS, connectorData } from "./connectors/index.js";
 import { listProposals, reviewProposal } from "./selfdev/index.js";
 import { searchKnowledge } from "./memory/search.js";
 import { scheduleWikiIngest, lintWiki } from "./wiki/index.js";
+import { getWeather } from "./weather.js";
 
 export const api = Router();
 
@@ -104,6 +105,35 @@ api.get("/brain/search", (req, res) => {
 /* ── Notes / Tâches / Mémoires / Documents ─────────────────────── */
 
 api.get("/notes", (_req, res) => res.json({ notes: getDb().notes }));
+
+/** Édition d'une note depuis un popup. */
+api.put("/notes/:id", (req, res) => {
+  const db = getDb();
+  const note = db.notes.find((n) => n.id === req.params.id);
+  if (!note) {
+    res.status(404).json({ error: "note introuvable" });
+    return;
+  }
+  const { title, content } = req.body ?? {};
+  if (typeof title === "string" && title.trim()) note.title = title.trim();
+  if (typeof content === "string") note.content = content;
+  if (note.nodeId) {
+    const node = db.nodes.find((n) => n.id === note.nodeId);
+    if (node) {
+      node.label = note.title.slice(0, 80);
+      node.content = note.content;
+    }
+  }
+  logActivity("note", `Note modifiée : ${note.title}`);
+  save();
+  res.json({ note });
+});
+
+/* ── Météo (open-meteo, sans clé ; secours hors-ligne) ─────────── */
+
+api.get("/weather", async (_req, res) => {
+  res.json(await getWeather());
+});
 api.get("/tasks", (_req, res) => res.json({ tasks: getDb().tasks }));
 api.get("/memories", (_req, res) => res.json({ memories: getDb().memories }));
 api.get("/activity", (_req, res) => res.json({ activity: getDb().activity.slice(0, 60) }));

@@ -18,6 +18,8 @@ export interface ToolOutcome {
   isError?: boolean;
   /** nœud créé dans le cerveau, à pousser au client en temps réel */
   node?: BrainNode;
+  /** panneau riche à ouvrir côté client (popup) */
+  ui?: { panel: string; payload: unknown };
 }
 
 export interface JarvisTool {
@@ -105,11 +107,12 @@ const builtinTools: JarvisTool[] = [
       const content = str(input, "content");
       const tags = Array.isArray(input.tags) ? (input.tags as string[]) : [];
       const node = addNode({ type: "note", label: title, content, tags });
-      db.notes.push({ id: newId("note"), title, content, tags, createdAt: new Date().toISOString(), nodeId: node.id });
+      const note = { id: newId("note"), title, content, tags, createdAt: new Date().toISOString(), nodeId: node.id };
+      db.notes.push(note);
       logActivity("note", `Note créée : ${title}`);
       save();
       scheduleWikiIngest({ kind: "note", title, content });
-      return { result: `Note « ${title} » créée.`, node };
+      return { result: `Note « ${title} » créée.`, node, ui: { panel: "note", payload: note } };
     },
   },
   {
@@ -133,7 +136,11 @@ const builtinTools: JarvisTool[] = [
       db.tasks.push({ id: newId("task"), title, due, done: false, createdAt: new Date().toISOString(), nodeId: node.id });
       logActivity("task", `Tâche créée : ${title}`);
       save();
-      return { result: `Tâche « ${title} » créée${due ? ` (échéance : ${due})` : ""}.`, node };
+      return {
+        result: `Tâche « ${title} » créée${due ? ` (échéance : ${due})` : ""}.`,
+        node,
+        ui: { panel: "tasks", payload: db.tasks.filter((t) => !t.done) },
+      };
     },
   },
   {

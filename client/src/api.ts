@@ -7,6 +7,7 @@ export interface ChatStreamHandlers {
   onToolStart?: (name: string) => void;
   onToolResult?: (name: string, result: string, isError: boolean) => void;
   onNodeAdded?: (node: BrainNode) => void;
+  onUi?: (panel: string, payload: unknown) => void;
   onDone?: (messageId: string, toolsUsed: string[]) => void;
   onError?: (message: string) => void;
 }
@@ -53,6 +54,9 @@ export async function streamChat(
         break;
       case "node_added":
         handlers.onNodeAdded?.(event.node);
+        break;
+      case "ui":
+        handlers.onUi?.(event.panel, event.payload);
         break;
       case "done":
         handlers.onDone?.(event.messageId, event.toolsUsed ?? []);

@@ -2,6 +2,7 @@ import { getDb, newId, save, logActivity } from "../db/store.js";
 import { addNode } from "../brain/graph.js";
 import { queryWiki } from "../wiki/index.js";
 import { searchKnowledge } from "../memory/search.js";
+import { getWeather } from "../weather.js";
 import {
   demoCreative,
   demoDriveFiles,
@@ -34,15 +35,17 @@ async function streamText(text: string, emit: (e: ChatEvent) => void): Promise<v
 interface DemoReply {
   text: string;
   tool?: { name: string; result: string };
+  /** panneau riche à ouvrir côté client (popup) */
+  ui?: { panel: string; payload: unknown };
   /** action locale réelle (création de note/tâche) */
-  act?: () => { text: string; nodeId?: string };
+  act?: () => { text: string; nodeId?: string; ui?: { panel: string; payload: unknown } };
 }
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function matchIntent(raw: string): DemoReply {
+async function matchIntent(raw: string): Promise<DemoReply> {
   const m = raw.toLowerCase();
 
   /* ── 1. Créations d'abord (sinon « rappelle-moi de préparer la RÉUNION »
@@ -61,7 +64,12 @@ function matchIntent(raw: string): DemoReply {
         db.notes.push({ id: newId("note"), title, content, tags: ["voix"], createdAt: new Date().toISOString(), nodeId: node.id });
         logActivity("note", `Note créée : ${title}`);
         save();
-        return { text: `C'est noté : « ${content} ». La note a rejoint votre galaxie, domaine Notes.`, nodeId: node.id };
+        const note = db.notes[db.notes.length - 1];
+        return {
+          text: `C'est noté, Monsieur : « ${content} ». La note a rejoint votre galaxie.`,
+          nodeId: node.id,
+          ui: { panel: "note", payload: note },
+        };
       },
       text: "",
     };
@@ -78,16 +86,29 @@ function matchIntent(raw: string): DemoReply {
         db.tasks.push({ id: newId("task"), title, done: false, createdAt: new Date().toISOString(), nodeId: node.id });
         logActivity("task", `Tâche créée : ${title}`);
         save();
-        return { text: `Très bien : « ${title} » est dans votre liste de tâches. Je veille au grain.`, nodeId: node.id };
+        return {
+          text: `Très bien, Monsieur : « ${title} » est dans votre liste. Je veille au grain.`,
+          nodeId: node.id,
+          ui: { panel: "tasks", payload: db.tasks.filter((t) => !t.done) },
+        };
       },
       text: "",
     };
   }
 
-  /* ── 2. Heure / date ── */
+  /* ── 2. Heure / date / météo ── */
   if (/quelle heure|l'heure|quel jour|la date|aujourd'hui on est/.test(m)) {
     const nowStr = new Date().toLocaleString("fr-FR", { dateStyle: "full", timeStyle: "short" });
     return { text: `Nous sommes le ${nowStr}, Monsieur.` };
+  }
+
+  if (/météo|temps qu'il fait|température|quel temps|il fait combien/.test(m)) {
+    const w = await getWeather();
+    return {
+      tool: { name: "météo · open-meteo", result: `${w.temperature}° à ${w.city}` },
+      ui: { panel: "weather", payload: w },
+      text: `Il fait **${w.temperature}°** à ${w.city}, ${w.sky}${w.live ? "" : " (estimation hors-ligne)"}. ${w.temperature < 10 ? "Prévoyez un manteau, Monsieur." : "Une journée tout à fait convenable, Monsieur."}`,
+    };
   }
 
   /* ── 3. Consultations (connecteurs) ── */
@@ -97,6 +118,7 @@ function matchIntent(raw: string): DemoReply {
     const playlist = /focus/.test(m) ? demoTracks.playlists[0] : /nuit|night|coding/.test(m) ? demoTracks.playlists[1] : demoTracks.playlists[0];
     return {
       tool: { name: "spotify · play_music", result: `Lecture démarrée : ${playlist.name}` },
+      ui: { panel: "spotify", payload: { ...demoTracks, playing: playlist } },
       text: `C'est parti, Monsieur : **${playlist.name}** (${playlist.tracks} titres, ${playlist.duration}). *${demoTracks.nowPlaying.title}* de ${demoTracks.nowPlaying.artist} ouvre la session. Ensuite : ${demoTracks.queue.map((t) => `*${t.title}*`).join(", ")}.`,
     };
   }
@@ -106,6 +128,7 @@ function matchIntent(raw: string): DemoReply {
     const unread = demoEmails.filter((e) => e.unread);
     return {
       tool: { name: "gmail · check_emails", result: `${unread.length} non lus` },
+      ui: { panel: "emails", payload: demoEmails },
       text: `Vous avez **${unread.length} e-mails non lus** :\n\n${unread
         .map((e) => `- **${e.from}** — ${e.subject} · *${e.time}*\n  ${e.preview.slice(0, 90)}…`)
         .join("\n")}\n\nLe compte-rendu de Marie Lambert me semble prioritaire — souhaitez-vous que je vous le résume ?`,
@@ -117,6 +140,7 @@ function matchIntent(raw: string): DemoReply {
     const today = demoEvents.filter((e) => e.day === "aujourd'hui");
     return {
       tool: { name: "gcal · check_calendar", result: `${today.length} événements aujourd'hui` },
+      ui: { panel: "agenda", payload: demoEvents },
       text: `Votre journée, Monsieur :\n\n${today
         .map((e) => `- **${e.start}–${e.end}** · ${e.title} *(${e.where})*`)
         .join("\n")}\n\nVotre créneau de deep work reste intact jusqu'à 9 h 30. Vendredi, n'oubliez pas la démo investisseurs à 10 h.`,
@@ -127,6 +151,7 @@ function matchIntent(raw: string): DemoReply {
   if (/\bslack\b|quoi de neuf/.test(m)) {
     return {
       tool: { name: "slack · read_channels", result: `${demoSlackMessages.length} messages récents` },
+      ui: { panel: "slack", payload: demoSlackMessages },
       text: `Le pouls de vos équipes, Monsieur :\n\n${demoSlackMessages
         .map((s) => `- **${s.channel}** · ${s.from}, ${s.time} — ${s.text}`)
         .join("\n")}`,
@@ -137,6 +162,7 @@ function matchIntent(raw: string): DemoReply {
   if (/\bdrive\b|mes fichiers|le contrat/.test(m)) {
     return {
       tool: { name: "gdrive · search_files", result: `${demoDriveFiles.length} fichiers` },
+      ui: { panel: "drive", payload: demoDriveFiles },
       text: `Voici ce que je trouve dans votre Drive :\n\n${demoDriveFiles
         .map((f) => `- **${f.name}** · ${f.kind}, modifié ${f.modified}`)
         .join("\n")}\n\nLe « Contrat prestation 2026.pdf » semble correspondre à votre recherche.`,
@@ -147,6 +173,7 @@ function matchIntent(raw: string): DemoReply {
   if (/\bnotion\b/.test(m)) {
     return {
       tool: { name: "notion · search_pages", result: `${demoNotionPages.length} pages` },
+      ui: { panel: "notion", payload: demoNotionPages },
       text: `Vos pages Notion récentes :\n\n${demoNotionPages
         .map((p) => `- ${p.icon} **${p.title}** · modifiée ${p.edited}`)
         .join("\n")}`,
@@ -157,6 +184,7 @@ function matchIntent(raw: string): DemoReply {
   if (/\bfigma\b|maquettes?/.test(m)) {
     return {
       tool: { name: "figma · list_files", result: `${demoFigmaFiles.length} fichiers` },
+      ui: { panel: "figma", payload: demoFigmaFiles },
       text: `Vos fichiers Figma :\n\n${demoFigmaFiles
         .map((f) => `- **${f.name}** · ${f.pages} pages, modifié ${f.edited}`)
         .join("\n")}`,
@@ -167,6 +195,7 @@ function matchIntent(raw: string): DemoReply {
   if (/\bchrome\b|historique|article d'hier|rouvre/.test(m)) {
     return {
       tool: { name: "chrome · search_history", result: `${demoCreative.chrome.length} entrées` },
+      ui: { panel: "chrome", payload: demoCreative.chrome },
       text: `Votre navigation récente :\n\n${demoCreative.chrome
         .map((h) => `- **${h.title}** · ${h.url} — *${h.when}*`)
         .join("\n")}\n\nL'article d'hier soir est le gist de Karpathy sur le pattern LLM Wiki.`,
@@ -177,6 +206,7 @@ function matchIntent(raw: string): DemoReply {
   if (/mes tâches|liste.*tâches|quoi faire|to.?do/.test(m)) {
     const tasks = getDb().tasks.filter((t) => !t.done).slice(0, 8);
     return {
+      ui: { panel: "tasks", payload: tasks },
       text: tasks.length
         ? `Vos tâches en cours :\n\n${tasks.map((t) => `- ${t.title}${t.due ? ` · *${t.due}*` : ""}`).join("\n")}`
         : "Votre liste est vide. Une journée parfaitement maîtrisée, Monsieur.",
@@ -190,6 +220,7 @@ function matchIntent(raw: string): DemoReply {
     if (pages.length) {
       return {
         tool: { name: "consult_wiki", result: `page « ${pages[0].title} »` },
+        ui: { panel: "wiki", payload: { slug: pages[0].slug, title: pages[0].title, content: pages[0].content } },
         text: `Voici ce que mon wiki compile sur le sujet :\n\n${pages[0].content.slice(0, 900)}\n\n*(page « ${pages[0].title} », entretenue automatiquement)*`,
       };
     }
@@ -212,8 +243,9 @@ function matchIntent(raw: string): DemoReply {
     const today = demoEvents.filter((e) => e.day === "aujourd'hui").length;
     return {
       text: pick([
-        `Bonsoir, Monsieur. Tous mes systèmes sont opérationnels. ${unread} e-mails non lus, ${today} rendez-vous aujourd'hui. Que puis-je pour vous ?`,
-        `Bonjour, Monsieur. Ravi de vous entendre. Votre journée compte ${today} rendez-vous — le premier à 9 h 30. Par quoi commençons-nous ?`,
+        `Mes salutations, Monsieur. Tous mes systèmes sont opérationnels : ${unread} e-mails non lus, ${today} rendez-vous aujourd'hui. Que puis-je pour vous ?`,
+        `Bonjour, Monsieur. Toujours un plaisir. Votre journée compte ${today} rendez-vous — le premier à 9 h 30. Par quoi commençons-nous ?`,
+        `À votre service, Monsieur. La journée s'annonce dense : ${today} rendez-vous, ${unread} e-mails en attente. Vos ordres ?`,
       ]),
     };
   }
@@ -242,7 +274,7 @@ export async function runDemoChat(input: ChatInput, emit: (e: ChatEvent) => void
   emit({ type: "meta", model: "jarvis-demo", tier: "démo", reason: "Mode démonstration — aucune consommation API." });
   await sleep(350); // le temps d'une respiration
 
-  const reply = matchIntent(input.message);
+  const reply = await matchIntent(input.message);
   const toolsUsed: string[] = [];
 
   if (reply.tool) {
@@ -254,14 +286,17 @@ export async function runDemoChat(input: ChatInput, emit: (e: ChatEvent) => void
   }
 
   let text = reply.text;
+  let ui = reply.ui;
   if (reply.act) {
     const out = reply.act();
     text = out.text;
+    if (out.ui) ui = out.ui;
     if (out.nodeId) {
       const node = db.nodes.find((n) => n.id === out.nodeId);
       if (node) emit({ type: "node_added", node });
     }
   }
+  if (ui) emit({ type: "ui", panel: ui.panel, payload: ui.payload });
 
   await streamText(text, emit);
 

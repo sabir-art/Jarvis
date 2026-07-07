@@ -20,6 +20,8 @@ export type ChatEvent =
   | { type: "tool_start"; name: string; input: unknown }
   | { type: "tool_result"; name: string; result: string; isError: boolean }
   | { type: "node_added"; node: BrainNode }
+  /** Ouvre un panneau riche côté client (e-mails, agenda, musique, note…). */
+  | { type: "ui"; panel: string; payload: unknown }
   | { type: "done"; messageId: string; toolsUsed: string[] }
   | { type: "error"; message: string };
 
@@ -148,6 +150,7 @@ export async function runChat(input: ChatInput, emit: (e: ChatEvent) => void): P
             resultText = outcome.result;
             isError = outcome.isError ?? false;
             if (outcome.node) emit({ type: "node_added", node: outcome.node });
+            if (outcome.ui) emit({ type: "ui", panel: outcome.ui.panel, payload: outcome.ui.payload });
           } catch (err) {
             resultText = `Échec de l'outil : ${err instanceof Error ? err.message : String(err)}`;
           }

@@ -3,10 +3,15 @@ import ReactMarkdown from "react-markdown";
 import { useJarvis } from "../state";
 import { dictateOnce, isSpeechSupported } from "../voice";
 import Orb from "./Orb";
+import Hologram from "./Hologram";
+import Hud from "./Hud";
+import { GalaxyScene } from "./brain/BrainCanvas";
 import {
   IconImage,
   IconMic,
+  IconOrb,
   IconSend,
+  IconSparkles,
   IconSpeaker,
   IconSpeakerOff,
   IconWave,
@@ -36,6 +41,8 @@ export default function HomeView() {
   const ttsEnabled = useJarvis((s) => s.ttsEnabled);
   const setTtsEnabled = useJarvis((s) => s.setTtsEnabled);
   const setOrbState = useJarvis((s) => s.setOrbState);
+  const persona = useJarvis((s) => s.persona);
+  const setPersona = useJarvis((s) => s.setPersona);
 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -106,7 +113,22 @@ export default function HomeView() {
 
   return (
     <div className={`home ${hasConversation ? "conversing" : "hero"}`}>
+      {/* Le cerveau, toujours présent derrière l'assistant. */}
+      <div className="galaxy-backdrop" aria-hidden>
+        <GalaxyScene backdrop />
+      </div>
+
+      <Hud />
+
       <div className="home-status">
+        <button
+          className="pill toggle"
+          title={persona === "orb" ? "Passer à l'avatar holographique" : "Revenir à l'orbe"}
+          onClick={() => setPersona(persona === "orb" ? "hologram" : "orb")}
+        >
+          {persona === "orb" ? <IconSparkles size={13} /> : <IconOrb size={13} />}
+          {persona === "orb" ? "avatar" : "orbe"}
+        </button>
         {demoMode && <span className="pill demo-pill">Mode démo · 0 conso API</span>}
         {isSpeechSupported() && (
           <button
@@ -127,7 +149,11 @@ export default function HomeView() {
       </div>
 
       <div className="home-center">
-        <Orb size={hasConversation ? 130 : 290} onClick={toggleDictation} />
+        {persona === "hologram" ? (
+          <Hologram size={hasConversation ? 132 : 268} onClick={toggleDictation} />
+        ) : (
+          <Orb size={hasConversation ? 130 : 290} onClick={toggleDictation} />
+        )}
         {!hasConversation && (
           <>
             <p className="home-hint">

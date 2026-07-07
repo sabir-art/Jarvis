@@ -38,16 +38,17 @@ export function fibonacciSphere(count: number, radius: number): THREE.Vector3[] 
 }
 
 /** Couleur de chaque domaine (galaxie). */
+/** Palette moderne, accordée à l'interface (accent #7cc4ff, pastels froids). */
 export const CLUSTER_COLORS: Record<string, string> = {
-  hub_memory: "#4de3c0",
-  hub_notes: "#ffd24d",
-  hub_tasks: "#ffa94d",
-  hub_conversations: "#b58aff",
-  hub_search: "#e06bff",
-  hub_documents: "#5ec6ff",
-  hub_skills: "#ff8a3d",
-  hub_system: "#57e6ff",
-  hub_wiki: "#a8ff6b",
+  hub_memory: "#5eead4",
+  hub_notes: "#fbd38d",
+  hub_tasks: "#fca86e",
+  hub_conversations: "#a5b4fc",
+  hub_search: "#d0a5fc",
+  hub_documents: "#7cc4ff",
+  hub_skills: "#f2a6c9",
+  hub_system: "#8fd0ff",
+  hub_wiki: "#a7e88f",
 };
 
 export function clusterColor(clusterId: string): string {

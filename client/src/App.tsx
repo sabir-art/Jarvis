@@ -6,6 +6,7 @@ import WikiView from "./components/views/WikiView";
 import ConnectorsView from "./components/views/ConnectorsView";
 import TasksView from "./components/views/TasksView";
 import AutoDevView from "./components/views/AutoDevView";
+import PopupHost from "./components/PopupHost";
 import { useJarvis } from "./state";
 import { useVoiceEngine } from "./voice";
 
@@ -39,6 +40,7 @@ export default function App() {
         {view === "connectors" && <ConnectorsView />}
         {view === "tasks" && <TasksView />}
         {view === "autodev" && <AutoDevView />}
+        <PopupHost />
       </main>
     </div>
   );
