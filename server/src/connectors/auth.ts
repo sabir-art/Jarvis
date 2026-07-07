@@ -88,6 +88,8 @@ export const AUTH_SPECS: Record<string, AuthSpec> = {
     tokenUrl: "https://accounts.spotify.com/api/token",
     scopes: [
       "playlist-read-private",
+      "playlist-read-collaborative",
+      "user-library-read", // titres likés
       "user-read-recently-played",
       "user-read-playback-state",
       "user-modify-playback-state", // lancer/reprendre la lecture

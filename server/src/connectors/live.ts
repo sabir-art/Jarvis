@@ -239,8 +239,40 @@ async function liveSlackMessages(): Promise<typeof demoSlackMessages> {
 /* ── Spotify : commande du lecteur (recherche + lecture) ───────── */
 
 export type PlayOutcome =
-  | { ok: true; kind: "track" | "playlist" | "resume"; label: string; artist?: string; device: string; launched?: boolean }
+  | {
+      ok: true;
+      kind: "track" | "playlist" | "liked" | "resume";
+      label: string;
+      artist?: string;
+      device: string;
+      launched?: boolean;
+      /** une suite de morceaux similaires a été préparée (radio) */
+      radio?: boolean;
+    }
   | { ok: false; reason: "no_device" | "premium_required" | "not_found" | "error"; detail?: string; launched?: boolean };
+
+const normName = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+/**
+ * Radio autour d'un morceau : les top titres de l'artiste, pour que
+ * « suivant » ait toujours une suite — comme le fait Spotify lui-même.
+ */
+async function radioUris(token: string, artistId: string, excludeUri?: string): Promise<string[]> {
+  try {
+    const top = await spotifyCall(token, `/artists/${artistId}/top-tracks?market=from_token`);
+    return ((top.body.tracks as { uri: string }[]) ?? [])
+      .map((t) => t.uri)
+      .filter((u) => u !== excludeUri)
+      .slice(0, 12);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Ouvre l'application Spotify sur CETTE machine (le serveur JARVIS tourne
@@ -338,21 +370,47 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
     const dev = `?device_id=${device.id}`;
 
     const wantsPlaylist = /playlist/i.test(query);
-    const q = query.trim();
+    const q = query.replace(/\bplaylist\b/gi, " ").replace(/\s+/g, " ").trim();
 
-    let play: { body?: string; kind: "track" | "playlist" | "resume"; label: string; artist?: string } | null = null;
-    if (q) {
+    let play: { body?: string; kind: "track" | "playlist" | "liked" | "resume"; label: string; artist?: string; radio?: boolean } | null = null;
+
+    /* 1. Titres likés (« mets mes likes », « mes favoris ») */
+    if (/\b(like[sd]?|likee?s?|favoris?|coups? de c(?:oe|œ)ur|titres? preferes?)\b/i.test(query)) {
+      const liked = await spotifyCall(token, "/me/tracks?limit=50");
+      const uris = ((liked.body.items as { track: { uri: string } }[]) ?? []).map((i) => i.track.uri);
+      if (!uris.length) return { ok: false, reason: "not_found" };
+      play = { body: JSON.stringify({ uris }), kind: "liked", label: `vos titres likés (${uris.length})` };
+    }
+
+    /* 2. VOS playlists d'abord (« mets ma playlist restaurant ») */
+    if (!play && q) {
+      const mine = await spotifyCall(token, "/me/playlists?limit=50");
+      const items = ((mine.body.items as { name: string; uri: string; tracks?: { total?: number } }[]) ?? []).filter(Boolean);
+      const qn = normName(q);
+      const match = items.find((p) => normName(p.name).includes(qn) || (qn.length >= 4 && qn.includes(normName(p.name))));
+      if (match && (wantsPlaylist || normName(match.name) === qn || normName(match.name).includes(qn))) {
+        play = { body: JSON.stringify({ context_uri: match.uri }), kind: "playlist", label: match.name };
+      }
+    }
+
+    /* 3. Recherche globale : piste (avec radio) ou playlist publique */
+    if (!play && q) {
       const type = wantsPlaylist ? "playlist" : "track,playlist";
       const search = await spotifyCall(token, `/search?q=${encodeURIComponent(q)}&type=${type}&limit=5`);
       const tracks = ((search.body.tracks as { items?: Record<string, unknown>[] })?.items ?? []).filter(Boolean);
       const playlists = ((search.body.playlists as { items?: Record<string, unknown>[] })?.items ?? []).filter(Boolean);
       if (!wantsPlaylist && tracks.length > 0) {
         const t = tracks[0];
+        // le morceau demandé PLUS une suite de morceaux similaires :
+        // « suivant » fonctionne toujours, comme dans Spotify
+        const artists = (t.artists as { id?: string; name: string }[]) ?? [];
+        const suite = artists[0]?.id ? await radioUris(token, artists[0].id, String(t.uri)) : [];
         play = {
-          body: JSON.stringify({ uris: [t.uri] }),
+          body: JSON.stringify({ uris: [t.uri, ...suite] }),
           kind: "track",
           label: String(t.name),
-          artist: ((t.artists as { name: string }[]) ?? []).map((a) => a.name).join(", "),
+          artist: artists.map((a) => a.name).join(", "),
+          radio: suite.length > 0,
         };
       } else if (playlists.length > 0) {
         const p = playlists[0];
@@ -360,9 +418,9 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
       } else {
         return { ok: false, reason: "not_found" };
       }
-    } else {
-      play = { kind: "resume", label: "lecture" }; // reprise simple
     }
+
+    if (!play) play = { kind: "resume", label: "lecture" }; // reprise simple
 
     let res = await spotifyCall(token, `/me/player/play${dev}`, { method: "PUT", body: play.body });
     if (launched && res.status === 404) {
@@ -385,7 +443,7 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
       if (/device/i.test(msg)) return { ok: false, reason: "no_device", launched };
       return { ok: false, reason: "error", detail: msg, launched };
     }
-    return { ok: true, kind: play.kind, label: play.label, artist: play.artist, device: device.name, launched };
+    return { ok: true, kind: play.kind, label: play.label, artist: play.artist, device: device.name, launched, radio: play.radio };
   } catch (err) {
     return { ok: false, reason: "error", detail: err instanceof Error ? err.message : String(err) };
   }
@@ -481,6 +539,27 @@ export async function controlSpotify(
     if (r.status >= 400) {
       const msg = (r.body.error as { message?: string })?.message ?? `HTTP ${r.status}`;
       console.warn(`◈ Spotify — commande ${action} refusée : ${r.status} ${msg}`);
+
+      /* « suivant » sans file d'attente : on fait comme Spotify — on
+         enchaîne nous-mêmes sur des morceaux similaires (radio) */
+      if (action === "next" && (/restriction/i.test(msg) || r.status === 404)) {
+        const cur = await spotifyCall(token, "/me/player");
+        const item = cur.body.item as { uri?: string; artists?: { id?: string }[] } | undefined;
+        const artistId = item?.artists?.[0]?.id;
+        if (artistId) {
+          const uris = await radioUris(token, artistId, item?.uri);
+          if (uris.length) {
+            const p = await spotifyCall(token, "/me/player/play", { method: "PUT", body: JSON.stringify({ uris }) });
+            if (p.status < 400) return { ok: true };
+          }
+        }
+      }
+      /* « précédent » sans file : on revient au début du morceau */
+      if (action === "previous" && (/restriction/i.test(msg) || r.status === 404)) {
+        const p = await spotifyCall(token, "/me/player/seek?position_ms=0", { method: "PUT" });
+        if (p.status < 400) return { ok: true };
+      }
+
       if (/permission|scope/i.test(msg)) return { ok: false, error: "ré-autorisation Spotify requise (Connecteurs → Spotify → Ré-autoriser)" };
       if (/restriction/i.test(msg)) return { ok: false, error: "Spotify interdit cette action sur ce contenu" };
       if (/premium/i.test(msg) || r.status === 403) return { ok: false, error: "Spotify Premium requis pour la télécommande" };

@@ -164,12 +164,15 @@ async function replyMusic(m: string): Promise<DemoReply> {
           ? { ...tracks, nowPlaying: { title: outcome.label, artist: outcome.artist ?? "", album: "" } }
           : { ...tracks, playing: { name: outcome.label, tracks: 0, duration: "—" } };
       const launched = outcome.launched ? " (j'ai ouvert Spotify pour vous)" : "";
+      const radio = outcome.radio ? " La suite est prête : des morceaux dans la même veine enchaîneront." : "";
       const text =
         outcome.kind === "track"
-          ? `À vos oreilles, Monsieur : **${outcome.label}**${outcome.artist ? ` de ${outcome.artist}` : ""} — lancé sur « ${outcome.device} »${launched}.`
+          ? `À vos oreilles, Monsieur : **${outcome.label}**${outcome.artist ? ` de ${outcome.artist}` : ""} — lancé sur « ${outcome.device} »${launched}.${radio}`
           : outcome.kind === "playlist"
             ? `C'est parti, Monsieur : playlist **${outcome.label}** sur « ${outcome.device} »${launched}.`
-            : `Je relance la lecture sur « ${outcome.device} », Monsieur${launched}.`;
+            : outcome.kind === "liked"
+              ? `Vos coups de cœur, Monsieur : **${outcome.label}** — sur « ${outcome.device} »${launched}.`
+              : `Je relance la lecture sur « ${outcome.device} », Monsieur${launched}.`;
       return {
         tool: { name: "spotify · play_music", result: `lecture : ${outcome.label} (${outcome.device})` },
         ui: { panel: "spotify", payload },
@@ -343,7 +346,7 @@ function detectIntent(mn: string): Intent | null {
     words.filter((x) => new RegExp(`\\b${x}`).test(mn) || new RegExp(`\\b${collapse(x)}`).test(mc)).length;
 
   const scores: [Intent, number][] = [
-    ["music", w(2, "musique", "music", "chanson", "morceau", "playlist", "spotify", "ecouter", "ecoute", "zik", "volume", "pause", "arrete la", "stop la", "coupe le son", "plus fort", "moins fort", "monte le son", "baisse le son") + w(1, "joue", "mets", "lance", "allume", "balance", "play", "son", "stop", "suivant", "precedent", "monte", "baisse")],
+    ["music", w(2, "musique", "music", "chanson", "morceau", "playlist", "spotify", "ecouter", "ecoute", "zik", "volume", "pause", "arrete la", "stop la", "coupe le son", "plus fort", "moins fort", "monte le son", "baisse le son", "titres likes", "mes likes", "favoris", "coups de coeur") + w(1, "joue", "mets", "lance", "allume", "balance", "play", "son", "stop", "suivant", "precedent", "monte", "baisse")],
     ["emails", w(2, "mail", "mails", "email", "emails", "courriel", "courriels", "gmail", "inbox", "reception") + w(1, "boite", "recu", "recus", "message", "messages", "messagerie", "lis", "non lus")],
     ["agenda", w(2, "agenda", "calendrier", "rendez", "rdv", "reunion", "reunions", "planning", "meeting") + w(1, "journee", "semaine", "demain", "emploi du temps", "prevu", "prochain", "programme")],
     ["drive", w(3, "drive", "gdrive") + w(1, "fichier", "fichiers", "dossier", "pdf", "contrat", "tableur")],

@@ -393,10 +393,10 @@ const connectorTools: JarvisTool[] = [
     definition: {
       name: "play_music",
       description:
-        "Lance réellement la musique sur Spotify : piste, artiste ou playlist. À utiliser quand l'utilisateur demande de jouer/mettre de la musique. Query vide = reprendre la lecture.",
+        "Lance réellement la musique sur Spotify : piste (avec radio de morceaux similaires à la suite), artiste, playlist de l'utilisateur, ou ses titres likés (« mes likes », « mes favoris »). Query vide = reprendre la lecture.",
       input_schema: {
         type: "object",
-        properties: { query: { type: "string", description: "Piste, artiste ou playlist demandée (ex. « playlist focus », « Solaris »)." } },
+        properties: { query: { type: "string", description: "Piste, artiste, « playlist X », ou « titres likés »." } },
       },
     },
     handler: async (input) => {
