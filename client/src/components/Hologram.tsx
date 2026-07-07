@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useJarvis } from "../state";
+import Avatar3D from "./Avatar3D";
 
 /**
  * Visuel : une vraie illustration anime est utilisée si disponible —
@@ -23,6 +24,12 @@ const IMAGE_SOURCES = [
 export default function Hologram({ size = 300, onClick }: { size?: number; onClick?: () => void }) {
   const orbState = useJarvis((s) => s.orbState);
   const [srcIdx, setSrcIdx] = useState(0);
+  const [vrmMissing, setVrmMissing] = useState(false);
+
+  // Un modèle 3D vivant (client/public/avatar.vrm) prime sur l'image.
+  if (!vrmMissing) {
+    return <Avatar3D size={size} onClick={onClick} onUnavailable={() => setVrmMissing(true)} />;
+  }
 
   return (
     <div

@@ -1210,3 +1210,8 @@ button { font-family: inherit; }
   .cockpit { grid-template-columns: 1fr; }
   .cockpit-left { display: none; }
 }
+
+
+/* ── Avatar 3D (VRM) ──────────────────────────────────── */
+.avatar3d canvas { border-radius: 14px; }
+.avatar3d { animation: none; } /* le modèle respire lui-même */
