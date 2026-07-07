@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls, Stars } from "@react-three/drei";
@@ -374,7 +374,28 @@ function CameraRig({ layout }: { layout: GalaxyLayout }) {
   return null;
 }
 
-export function GalaxyScene({ backdrop = false }: { backdrop?: boolean }) {
+/**
+ * Décale la galaxie vers la droite du cadre (projection élargie à gauche)
+ * et recule la caméra : l'avatar en pied occupe l'espace libéré à gauche
+ * sans jamais chevaucher le cerveau.
+ */
+function ViewShift({ enabled }: { enabled: boolean }) {
+  const { camera, size } = useThree();
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    if (enabled) {
+      cam.setViewOffset(size.width * 1.28, size.height, 0, 0, size.width, size.height);
+      cam.position.set(0, 16, 62);
+    } else {
+      cam.clearViewOffset();
+      cam.position.set(0, 11, 40);
+    }
+    return () => cam.clearViewOffset();
+  }, [enabled, camera, size.width, size.height]);
+  return null;
+}
+
+export function GalaxyScene({ backdrop = false, shiftRight = false }: { backdrop?: boolean; shiftRight?: boolean }) {
   const layout = useLayout();
   const selectNode = useJarvis((s) => s.selectNode);
   return (
@@ -383,6 +404,7 @@ export function GalaxyScene({ backdrop = false }: { backdrop?: boolean }) {
       dpr={[1, backdrop ? 1.25 : 1.75]}
       onPointerMissed={backdrop ? undefined : () => selectNode(null, false)}
     >
+      <ViewShift enabled={shiftRight && !backdrop} />
       {!backdrop && <color attach="background" args={["#04070d"]} />}
       <fog attach="fog" args={["#04070d", 45, 110]} />
       <Stars radius={110} depth={50} count={backdrop ? 1800 : 3000} factor={3.4} saturation={0} fade speed={0.3} />
@@ -402,7 +424,7 @@ export function GalaxyScene({ backdrop = false }: { backdrop?: boolean }) {
   );
 }
 
-export default function BrainCanvas() {
+export default function BrainCanvas({ overlay }: { overlay?: ReactNode }) {
   const nodes = useJarvis((s) => s.nodes);
   const selectedId = useJarvis((s) => s.selectedNodeId);
   const selectNode = useJarvis((s) => s.selectNode);
@@ -440,7 +462,8 @@ export default function BrainCanvas() {
       {view === "galaxy" ? (
         <>
           <div className="brain-hint">glisser : tourner · molette : zoomer · clic : ouvrir un nœud</div>
-          <GalaxyScene />
+          <GalaxyScene shiftRight={!!overlay} />
+          {overlay && <div className="space-avatar">{overlay}</div>}
         </>
       ) : (
         <GridView onOpenInGalaxy={() => setView("galaxy")} />

@@ -13,23 +13,39 @@ import { useJarvis } from "../state";
  *  - ses lèvres bougent quand il parle (synchronisées à la voix) ;
  *  - il penche la tête et vous regarde quand il écoute ;
  *  - il lève les yeux quand il réfléchit.
+ * Deux variantes :
+ *  - "bust"  : plan buste dans un cadre (colonne de gauche) ;
+ *  - "space" : personnage en pied, sans conteneur, qui flotte dans
+ *    l'espace du cerveau — sa lueur se diffuse en gradient radial.
  * Créez un personnage sans Blender avec VRoid Studio (gratuit), ou
  * téléchargez un VRM libre — exportez/déposez le fichier, c'est tout.
  */
 
-function VrmActor({ vrm }: { vrm: VRM }) {
+type Variant = "bust" | "space";
+
+function VrmActor({ vrm, float = false }: { vrm: VRM; float?: boolean }) {
   const orbState = useJarvis((s) => s.orbState);
   const stateRef = useRef(orbState);
   stateRef.current = orbState;
 
   const blink = useRef({ next: 1.5, phase: -1 });
   const mouth = useRef({ value: 0, target: 0, nextChange: 0 });
+  // rotateVRM0 peut avoir orienté la scène : on flotte autour de cette base.
+  const base = useRef<{ y: number; rotY: number } | null>(null);
 
   useFrame(({ clock }, delta) => {
     const t = clock.elapsedTime;
     const s = stateRef.current;
     const em = vrm.expressionManager;
     const humanoid = vrm.humanoid;
+
+    /* flottement en apesanteur (variante « space ») */
+    if (float) {
+      if (!base.current) base.current = { y: vrm.scene.position.y, rotY: vrm.scene.rotation.y };
+      vrm.scene.position.y = base.current.y + Math.sin(t * 0.55) * 0.05 + Math.sin(t * 1.3) * 0.012;
+      vrm.scene.rotation.y = base.current.rotY + Math.sin(t * 0.22) * 0.07;
+      vrm.scene.rotation.z = Math.sin(t * 0.34) * 0.013;
+    }
 
     /* respiration + léger balancement */
     const chest = humanoid?.getNormalizedBoneNode("chest") ?? humanoid?.getNormalizedBoneNode("spine");
@@ -85,29 +101,39 @@ function VrmActor({ vrm }: { vrm: VRM }) {
   return <primitive object={vrm.scene} />;
 }
 
-function Scene({ vrm }: { vrm: VRM }) {
+function Scene({ vrm, float = false }: { vrm: VRM; float?: boolean }) {
   return (
     <>
       <ambientLight intensity={0.9} color="#cfe9ff" />
       <directionalLight position={[1.5, 2.5, 2]} intensity={1.6} color="#eaf6ff" />
       <directionalLight position={[-2, 1.2, -1.5]} intensity={1.1} color="#35e0ff" />
-      <VrmActor vrm={vrm} />
+      <VrmActor vrm={vrm} float={float} />
     </>
   );
 }
 
+interface Framing {
+  eyeY: number; // hauteur des yeux (plan buste)
+  centerY: number; // centre du corps (plan en pied)
+  dist: number; // recul caméra pour cadrer le corps entier
+}
+
+const SPACE_FOV = 26;
+
 export default function Avatar3D({
   size = 200,
+  variant = "bust",
   onClick,
   onUnavailable,
 }: {
   size?: number;
+  variant?: Variant;
   onClick?: () => void;
   onUnavailable: () => void;
 }) {
   const orbState = useJarvis((s) => s.orbState);
   const [vrm, setVrm] = useState<VRM | null>(null);
-  const [eyeY, setEyeY] = useState(1.42);
+  const [framing, setFraming] = useState<Framing>({ eyeY: 1.42, centerY: 0.85, dist: 4.4 });
 
   useEffect(() => {
     let disposed = false;
@@ -127,15 +153,19 @@ export default function Avatar3D({
         loaded.scene.traverse((o) => {
           o.frustumCulled = false;
         });
-        // Cadrage automatique : on vise les yeux, quelle que soit la
-        // taille du modèle (position réelle de l'os de la tête).
+        // Cadrage automatique, quelle que soit la taille du modèle :
+        // position réelle de l'os de la tête + boîte englobante du corps.
         loaded.scene.updateMatrixWorld(true);
         const head = loaded.humanoid?.getNormalizedBoneNode("head");
-        if (head) {
-          const p = new THREE.Vector3();
-          head.getWorldPosition(p);
-          setEyeY(p.y + 0.02);
-        }
+        const headPos = new THREE.Vector3();
+        if (head) head.getWorldPosition(headPos);
+        const box = new THREE.Box3().setFromObject(loaded.scene);
+        const height = Math.max(0.6, box.max.y - box.min.y);
+        setFraming({
+          eyeY: head ? headPos.y + 0.02 : height * 0.88,
+          centerY: (box.max.y + box.min.y) / 2,
+          dist: (height * 0.62) / Math.tan((SPACE_FOV / 2) * (Math.PI / 180)),
+        });
         setVrm(loaded);
       },
       undefined,
@@ -151,6 +181,34 @@ export default function Avatar3D({
 
   if (!vrm) return null; // en attente de chargement (ou repli déclenché)
 
+  /* ── Variante « space » : en pied, sans conteneur, fondu dans l'espace ── */
+  if (variant === "space") {
+    return (
+      <div
+        className={`avatar-space ${orbState}`}
+        onClick={onClick}
+        role="button"
+        aria-label="Parler à Jarvis"
+        title="Dites « Jarvis » ou cliquez pour parler"
+      >
+        <div className="space-glow" />
+        <div className="space-glow inner" />
+        <Canvas
+          gl={{ alpha: true, antialias: true }}
+          camera={{ position: [0, framing.centerY, framing.dist], fov: SPACE_FOV }}
+          onCreated={({ camera }) => camera.lookAt(0, framing.centerY, 0)}
+          dpr={[1, 2]}
+        >
+          <Scene vrm={vrm} float />
+        </Canvas>
+        <span className="holo-particle p1" />
+        <span className="holo-particle p2" />
+        <span className="holo-particle p3" />
+      </div>
+    );
+  }
+
+  /* ── Variante « bust » : plan buste dans la colonne de gauche ── */
   return (
     <div
       className={`holo avatar3d ${orbState}`}
@@ -163,8 +221,8 @@ export default function Avatar3D({
       <div className="holo-glow" />
       <Canvas
         gl={{ alpha: true, antialias: true }}
-        camera={{ position: [0, eyeY, 1.35], fov: 24 }}
-        onCreated={({ camera }) => camera.lookAt(0, eyeY, 0)}
+        camera={{ position: [0, framing.eyeY, 1.35], fov: 24 }}
+        onCreated={({ camera }) => camera.lookAt(0, framing.eyeY, 0)}
         dpr={[1, 2]}
       >
         <Scene vrm={vrm} />

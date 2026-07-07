@@ -4,6 +4,7 @@ import { useJarvis } from "../state";
 import { dictateOnce, isSpeechSupported } from "../voice";
 import Orb from "./Orb";
 import Hologram from "./Hologram";
+import Avatar3D from "./Avatar3D";
 import Hud from "./Hud";
 import BrainCanvas from "./brain/BrainCanvas";
 import {
@@ -40,7 +41,15 @@ function shortModel(id?: string | null): string {
 }
 
 /** Colonne de gauche : HUD, réglages, orbe, données vivantes. */
-function LeftColumn({ onOrbClick, dictating }: { onOrbClick: () => void; dictating: boolean }) {
+function LeftColumn({
+  onOrbClick,
+  dictating,
+  vrmMissing,
+}: {
+  onOrbClick: () => void;
+  dictating: boolean;
+  vrmMissing: boolean;
+}) {
   const demoMode = useJarvis((s) => s.demoMode);
   const wakeEnabled = useJarvis((s) => s.wakeEnabled);
   const setWakeEnabled = useJarvis((s) => s.setWakeEnabled);
@@ -78,7 +87,9 @@ function LeftColumn({ onOrbClick, dictating }: { onOrbClick: () => void; dictati
       </div>
 
       <div className={`orb-slot ${dictating ? "dictating" : ""}`}>
-        {persona === "hologram" ? (
+        {/* En mode avatar, le personnage flotte dans l'espace du cerveau ;
+            l'orbe reste ici. Sans fichier VRM : repli image dans la colonne. */}
+        {persona === "hologram" && vrmMissing ? (
           <Hologram size={160} onClick={onOrbClick} />
         ) : (
           <Orb size={185} onClick={onOrbClick} />
@@ -127,10 +138,12 @@ export default function HomeView() {
   const toolActivity = useJarvis((s) => s.toolActivity);
   const sendMessage = useJarvis((s) => s.sendMessage);
   const setOrbState = useJarvis((s) => s.setOrbState);
+  const persona = useJarvis((s) => s.persona);
 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dictating, setDictating] = useState(false);
+  const [vrmMissing, setVrmMissing] = useState(false);
   const stopDictation = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -193,10 +206,16 @@ export default function HomeView() {
 
   return (
     <div className="cockpit">
-      <LeftColumn onOrbClick={toggleDictation} dictating={dictating} />
+      <LeftColumn onOrbClick={toggleDictation} dictating={dictating} vrmMissing={vrmMissing} />
 
       <section className="cockpit-center">
-        <BrainCanvas />
+        <BrainCanvas
+          overlay={
+            persona === "hologram" && !vrmMissing ? (
+              <Avatar3D variant="space" onClick={toggleDictation} onUnavailable={() => setVrmMissing(true)} />
+            ) : undefined
+          }
+        />
       </section>
 
       <aside className="cockpit-chat glass">
