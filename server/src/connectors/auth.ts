@@ -39,9 +39,9 @@ const GOOGLE_STEPS = (api: string, scope: string) => [
   `Ouvrez console.cloud.google.com et créez (ou choisissez) un projet.`,
   `« API et services » → « Bibliothèque » : activez l'API ${api}.`,
   `« Écran de consentement OAuth » : type Externe, ajoutez votre e-mail comme utilisateur test.`,
-  `« Identifiants » → « Créer des identifiants » → « ID client OAuth » → type Application Web.`,
-  `Ajoutez l'URI de redirection exacte affichée ci-dessous, puis copiez le client ID et le secret ici.`,
-  `Cliquez « Autoriser » : Google ouvre l'écran de consentement (${scope}).`,
+  `« Identifiants » → « Créer des identifiants » → « ID client OAuth » → type Application Web (impérativement, pas « Ordinateur de bureau »).`,
+  `Dans « URI de redirection autorisés », collez l'URI ci-dessous à l'identique — http (pas https), sans / final. Astuce : ajoutez d'un coup les URI gmail, gcal et gdrive pour réutiliser ce client sur les trois cartes.`,
+  `Enregistrez, patientez 1 à 5 min (propagation Google), copiez le client ID et le secret ici, puis cliquez « Autoriser » (${scope}).`,
 ];
 
 export const AUTH_SPECS: Record<string, AuthSpec> = {
