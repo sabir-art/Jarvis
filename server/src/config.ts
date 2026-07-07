@@ -23,6 +23,8 @@ for (const envPath of [
 export const config = {
   port: Number(process.env.PORT ?? 3001),
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  /** Force le mode démo même avec une clé API (JARVIS_DEMO=1). */
+  demoForced: process.env.JARVIS_DEMO === "1",
   dataFile: path.isAbsolute(process.env.JARVIS_DATA_FILE ?? "")
     ? (process.env.JARVIS_DATA_FILE as string)
     : path.resolve(serverRoot, process.env.JARVIS_DATA_FILE ?? "./data/jarvis.json"),
@@ -35,4 +37,9 @@ export const config = {
 
 export function hasApiKey(): boolean {
   return config.anthropicApiKey.length > 0;
+}
+
+/** Mode démo : sans clé API (ou forcé), JARVIS répond localement, à coût nul. */
+export function isDemoMode(): boolean {
+  return config.demoForced || !hasApiKey();
 }

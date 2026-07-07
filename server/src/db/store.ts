@@ -72,3 +72,11 @@ export function logActivity(kind: string, message: string): void {
 }
 
 process.on("exit", () => flush());
+// 'exit' ne se déclenche pas sur un arrêt par signal (Ctrl+C, docker stop) :
+// on rattrape la sauvegarde débouncée explicitement.
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, () => {
+    flush();
+    process.exit(0);
+  });
+}

@@ -4,16 +4,25 @@ import type {
   ActivityEvent,
   BrainEdge,
   BrainNode,
+  ConnectorInfo,
   Memory,
   ModelChoice,
+  OrbState,
   SkillProposal,
   Task,
   ToolActivity,
   UIMessage,
+  ViewName,
   WikiPageSummary,
 } from "./types";
 
 interface JarvisState {
+  /* navigation & orbe */
+  view: ViewName;
+  setView: (v: ViewName) => void;
+  orbState: OrbState;
+  setOrbState: (s: OrbState) => void;
+
   /* chat */
   messages: UIMessage[];
   streaming: boolean;
@@ -22,11 +31,13 @@ interface JarvisState {
   activeModel: string | null;
   activeModelReason: string | null;
   setModelChoice: (m: ModelChoice) => void;
-  sendMessage: (text: string, images?: { media_type: string; data: string }[]) => Promise<void>;
+  sendMessage: (text: string, opts?: { images?: { media_type: string; data: string }[]; viaVoice?: boolean }) => Promise<void>;
 
   /* voix */
   ttsEnabled: boolean;
   setTtsEnabled: (v: boolean) => void;
+  wakeEnabled: boolean;
+  setWakeEnabled: (v: boolean) => void;
 
   /* cerveau */
   nodes: BrainNode[];
@@ -42,7 +53,9 @@ interface JarvisState {
   activity: ActivityEvent[];
   proposals: SkillProposal[];
   wikiPages: WikiPageSummary[];
+  connectors: ConnectorInfo[];
   apiKeyConfigured: boolean;
+  demoMode: boolean;
   toggleTask: (id: string) => Promise<void>;
   reviewProposal: (id: string, decision: "approved" | "rejected") => Promise<void>;
 
@@ -59,16 +72,20 @@ const localId = () => `local_${Date.now()}_${uid++}`;
 function speakable(md: string): string {
   return md
     .replace(/```[\s\S]*?```/g, " (bloc de code) ")
-    .replace(/[*_#>`|-]/g, " ")
+    .replace(/[*_#>`|]/g, "")
+    .replace(/^- /gm, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 600);
 }
 
+let utteranceSeq = 0;
+
 function speak(text: string): void {
   if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
+  window.speechSynthesis.cancel(); // les onend des utterances précédentes sont ignorés (jeton)
+  const id = ++utteranceSeq;
   const utt = new SpeechSynthesisUtterance(text);
   utt.lang = "fr-FR";
   utt.rate = 1.02;
@@ -77,17 +94,46 @@ function speak(text: string): void {
     .getVoices()
     .find((v) => v.lang.startsWith("fr") && /google|natural|premium/i.test(v.name));
   if (voice) utt.voice = voice;
+
+  let started = false;
+  let finished = false;
+  const done = () => {
+    if (finished || id !== utteranceSeq) return; // une utterance plus récente a pris la main
+    finished = true;
+    const s = useJarvis.getState();
+    s.setOrbState(s.streaming ? "thinking" : "idle");
+    window.dispatchEvent(new CustomEvent("jarvis-tts-end"));
+  };
+  utt.onstart = () => {
+    started = true;
+    if (id !== utteranceSeq) return;
+    useJarvis.getState().setOrbState("speaking");
+    window.dispatchEvent(new CustomEvent("jarvis-tts-start"));
+  };
+  utt.onend = done;
+  utt.onerror = done;
   window.speechSynthesis.speak(utt);
+  // Garde-fou : certains environnements acceptent speak() sans jamais émettre
+  // d'événement (pas de moteur TTS, autoplay bloqué) → on libère l'écoute.
+  window.setTimeout(() => {
+    if (!started) done();
+  }, 2000);
 }
 
 export const useJarvis = create<JarvisState>((set, get) => ({
+  view: "home",
+  setView: (v) => set({ view: v }),
+  orbState: "idle",
+  setOrbState: (s) => set({ orbState: s }),
+
   messages: [],
   streaming: false,
   toolActivity: [],
   modelChoice: "auto",
   activeModel: null,
   activeModelReason: null,
-  ttsEnabled: false,
+  ttsEnabled: localStorage.getItem("jarvis.tts") !== "0",
+  wakeEnabled: localStorage.getItem("jarvis.wake") !== "0",
 
   nodes: [],
   edges: [],
@@ -99,26 +145,36 @@ export const useJarvis = create<JarvisState>((set, get) => ({
   activity: [],
   proposals: [],
   wikiPages: [],
+  connectors: [],
   apiKeyConfigured: true,
+  demoMode: false,
 
   setModelChoice: (m) => set({ modelChoice: m }),
   setTtsEnabled: (v) => {
     if (!v) window.speechSynthesis?.cancel();
+    localStorage.setItem("jarvis.tts", v ? "1" : "0");
     set({ ttsEnabled: v });
+  },
+  setWakeEnabled: (v) => {
+    localStorage.setItem("jarvis.wake", v ? "1" : "0");
+    set({ wakeEnabled: v });
   },
 
   selectNode: (id, fly = true) =>
     set({ selectedNodeId: id, flyToNodeId: fly && id ? id : null }),
   clearFlyTo: () => set({ flyToNodeId: null }),
 
-  sendMessage: async (text, images) => {
+  sendMessage: async (text, opts) => {
     if (get().streaming) return;
+    const images = opts?.images;
+    const viaVoice = opts?.viaVoice ?? false;
     const userMsg: UIMessage = { id: localId(), role: "user", content: text };
     const draft: UIMessage = { id: localId(), role: "assistant", content: "", streaming: true };
     set((s) => ({
       messages: [...s.messages, userMsg, draft],
       streaming: true,
       toolActivity: [],
+      orbState: "thinking",
     }));
 
     const patchDraft = (patch: Partial<UIMessage>) =>
@@ -154,7 +210,8 @@ export const useJarvis = create<JarvisState>((set, get) => ({
         onDone: (_id, toolsUsed) => {
           patchDraft({ streaming: false, toolsUsed });
           const finalText = get().messages.find((m) => m.id === draft.id)?.content ?? "";
-          if (get().ttsEnabled && finalText) speak(speakable(finalText));
+          // À l'oral : on répond à l'oral. Au clavier : seulement si activé.
+          if ((viaVoice || get().ttsEnabled) && finalText) speak(speakable(finalText));
         },
         onError: (message) =>
           set((s) => ({
@@ -169,7 +226,7 @@ export const useJarvis = create<JarvisState>((set, get) => ({
       patchDraft({ streaming: false, content: "⚠️ Liaison au serveur impossible." });
     });
 
-    set({ streaming: false });
+    set((s) => ({ streaming: false, orbState: s.orbState === "thinking" ? "idle" : s.orbState }));
     // Les arêtes du graphe et les panneaux se rafraîchissent après chaque tour.
     void get().refreshGraph();
     void get().refreshPanels();
@@ -209,8 +266,10 @@ export const useJarvis = create<JarvisState>((set, get) => ({
 
   bootstrap: async () => {
     try {
-      const health = await getJSON<{ apiKeyConfigured: boolean }>("/api/health");
-      set({ apiKeyConfigured: health.apiKeyConfigured });
+      const health = await getJSON<{ apiKeyConfigured: boolean; demoMode: boolean }>("/api/health");
+      set({ apiKeyConfigured: health.apiKeyConfigured, demoMode: health.demoMode });
+      const conn = await getJSON<{ connectors: ConnectorInfo[] }>("/api/connectors");
+      set({ connectors: conn.connectors });
       const msgs = await getJSON<{ messages: UIMessage[] }>("/api/messages");
       set({ messages: msgs.messages });
       await Promise.all([get().refreshGraph(), get().refreshPanels()]);

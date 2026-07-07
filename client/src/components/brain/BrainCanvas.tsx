@@ -402,7 +402,7 @@ export default function BrainCanvas() {
   const cluster = selected ? nodes.find((n) => n.id === selected.cluster) : null;
 
   return (
-    <div className="panel brain">
+    <div className="brain-stage">
       <div className="breadcrumb">
         CERVEAU
         {cluster && cluster.id !== selected?.id && (

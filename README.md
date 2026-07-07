@@ -1,24 +1,46 @@
-# ◈ JARVIS — assistant IA personnel
+# ◉ JARVIS — assistant IA personnel
 
-Un assistant personnel de nouvelle génération, inspiré du JARVIS de Tony Stark :
-un **cerveau-sphère 3D navigable** au centre, une conversation en streaming
-autour, et un moteur agentique Claude qui **agit** (mémoire, notes, tâches,
-recherche, code, vision) — le tout dans un cockpit sombre et lumineux.
+Un assistant personnel de nouvelle génération : une **orbe minimaliste** à qui
+l'on parle (« Bonjour Jarvis… »), un **cerveau-galaxie 3D** qui mémorise tout,
+un **wiki auto-entretenu**, des **connecteurs** vers vos services, et un moteur
+agentique Claude qui **agit** — dans une interface noire, épurée, façon Apple.
 
-![Interface JARVIS](docs/screenshot.png)
+![Accueil JARVIS](docs/screenshot.png)
+
+## ✦ Mode démo intégré (zéro coût)
+
+**Sans clé API, JARVIS est déjà vivant** : au premier démarrage il se remplit
+de contenu d'exemple (wiki, notes, tâches, mémoires, e-mails, agenda,
+playlists…) et répond localement aux demandes courantes — musique, e-mails,
+agenda, notes, tâches, heure, wiki — avec le même flux (streaming, outils,
+voix) que le mode réel. Idéal pour tout visualiser avant de configurer une clé.
+Badge « Mode démo · 0 conso API » affiché en permanence. Pour réinitialiser le
+contenu : supprimez `server/data/jarvis.json`.
+
+## ✦ La voix, façon Siri
+
+- Mot d'activation : dites **« Jarvis »**, **« Hello Jarvis »** ou **« Bonjour
+  Jarvis »** (l'écoute continue est active par défaut, désactivable en un clic).
+- « Jarvis, mets de la musique » → la commande part immédiatement ; « Jarvis »
+  seul → l'orbe passe en écoute et attend votre demande (8 s).
+- JARVIS répond à voix haute quand on lui parle à l'oral ; l'orbe s'anime
+  (écoute, réflexion, parole). Web Speech API native — Chrome/Edge recommandés,
+  aucun service externe.
 
 ## ✦ Fonctionnalités
 
 | Domaine | Ce qui est livré |
 |---|---|
-| **Cerveau-sphère 3D** | Graphe de connaissance rendu en WebGL (three.js / react-three-fiber) : hubs de domaines sur une sphère de Fibonacci, nœuds reliés par arcs, rotation douce, halos, champ d'étoiles. Zoom sémantique (les étiquettes apparaissent en s'approchant), survol, clic → vol de caméra + panneau de détail, recherche qui « vole » jusqu'au nœud, fil d'ariane. |
+| **Interface minimaliste** | Orbe noire animée (respiration, halo d'écoute, scintillement de réflexion, pulsation de parole), rail de navigation en verre, vues dédiées (Jarvis, Cerveau, Wiki, Connecteurs, Agenda & tâches, Auto-dev), typographies embarquées (Quicksand + Inter), icônes SVG sur mesure. |
+| **Connecteurs** | 12 connecteurs avec icônes de marque : Gmail, Google Agenda, Google Drive, Spotify, Notion, Slack, Figma, Adobe, Higgsfield, Runware, Webflow, Chrome. Architecture isolée : un connecteur = un module avec fournisseur de données ; en démo les données sont simulées, le branchement réel (OAuth/MCP) remplace le fournisseur sans toucher au reste. |
+| **Cerveau-galaxie 3D** | Graphe de connaissance rendu en WebGL (three.js / react-three-fiber) : hubs de domaines sur une sphère de Fibonacci, nœuds reliés par arcs, rotation douce, halos, champ d'étoiles. Zoom sémantique (les étiquettes apparaissent en s'approchant), survol, clic → vol de caméra + panneau de détail, recherche qui « vole » jusqu'au nœud, fil d'ariane. |
 | **Conversation** | Streaming token par token (SSE), markdown riche, personnalité JARVIS (posé, vouvoiement, humour pince-sans-dire). Historique persistant. |
 | **Routeur multi-modèle** | JARVIS choisit lui-même son modèle Claude selon la tâche : `claude-haiku-4-5` (rapide) / `claude-sonnet-5` (équilibré) / `claude-opus-4-8` (profond). Surcharge manuelle dans la barre du haut. Le modèle utilisé **et la raison du choix** sont affichés sur chaque réponse. |
 | **Outils (function calling)** | Boucle agentique serveur : date/heure, mémoire (`remember`/`recall`), notes, tâches (créer/lister/terminer), recherche dans la connaissance (RAG), recherche web, exécution de JavaScript en bac à sable. Chaque action alimente le cerveau en temps réel. |
 | **Mémoire persistante** | Tout ce que JARVIS apprend (faits, notes, tâches, recherches, documents, conversations) devient un nœud du cerveau, relié sémantiquement à ses voisins. Persistance JSON sur disque. |
 | **RAG documents** | Indexation de documents texte (`POST /api/documents`) + recherche TF-IDF interrogeable par JARVIS (`search_knowledge`). |
 | **LLM Wiki** | D'après le [pattern de Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) : JARVIS **rédige et entretient des pages de synthèse** markdown interconnectées (renvois `[[...]]`). *Ingest* automatique à chaque note/mémoire/document (asynchrone, sérialisé), outil `consult_wiki` pour répondre depuis la connaissance déjà compilée, et *lint* (bouton « Auditer la cohérence ») qui traque contradictions, doublons et renvois cassés. Les pages vivent dans le domaine « Wiki » de la galaxie et se lisent en markdown. |
-| **Voix** | Dictée (Web Speech API), mode **mains libres** avec mot d'activation « Jarvis, … », synthèse vocale des réponses (fr-FR). Sans service externe — Chrome/Edge recommandés. |
+| **Voix** | Mot d'activation « Jarvis » en écoute continue, carillon de réveil, dictée ponctuelle (bouton micro), synthèse vocale fr-FR avec orbe animée. Sans service externe. |
 | **Vision** | Joignez des images au chat : elles sont envoyées à Claude (blocs image base64). |
 | **Auto-développement supervisé** | JARVIS peut proposer de **nouveaux outils** (il écrit le code JS via `propose_skill`) ; vous les approuvez ou rejetez dans le panneau *Auto-dev*. Une compétence approuvée devient immédiatement un outil actif, exécuté en bac à sable. Chaque proposition est journalisée dans le cerveau. |
 | **Cockpit** | Panneaux vivants : statut (modèle actif, routage), tâches, mémoire, propositions auto-dev, journal d'activité. |
@@ -34,8 +56,9 @@ cp .env.example .env             # puis renseignez ANTHROPIC_API_KEY
 npm run dev                      # serveur (3001) + client Vite (5173)
 ```
 
-Ouvrez **http://localhost:5173**. Sans clé API, tout fonctionne sauf le chat
-(JARVIS vous le dira avec flegme).
+Ouvrez **http://localhost:5173** (Chrome ou Edge pour la voix). Sans clé API,
+le **mode démo** s'active tout seul : contenu d'exemple + réponses simulées,
+coût zéro. Ajoutez la clé quand vous voudrez l'intelligence réelle.
 
 ```bash
 npm run build   # build production (server/dist + client/dist)
@@ -46,7 +69,8 @@ npm start       # serveur de production
 
 | Variable | Rôle | Défaut |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Clé API Anthropic (côté serveur uniquement, jamais exposée au front) | — |
+| `ANTHROPIC_API_KEY` | Clé API Anthropic (côté serveur uniquement, jamais exposée au front). Absente → mode démo | — |
+| `JARVIS_DEMO` | `1` pour forcer le mode démo même avec une clé | — |
 | `PORT` | Port du backend | `3001` |
 | `JARVIS_MODEL_FAST` | Modèle du tier « rapide » | `claude-haiku-4-5` |
 | `JARVIS_MODEL_BALANCED` | Modèle du tier « équilibré » | `claude-sonnet-5` |
@@ -106,7 +130,9 @@ Jarvis/
 ### API principale
 
 ```
-GET  /api/health                     état + modèles configurés
+GET  /api/health                     état + modèles + mode démo
+GET  /api/connectors                 liste des connecteurs
+GET  /api/connectors/:id             données d'un connecteur (démo)
 POST /api/chat                       chat SSE {message, modelOverride?, images?}
 GET  /api/brain/graph                nœuds + arêtes du cerveau
 GET  /api/brain/search?q=            recherche de nœuds

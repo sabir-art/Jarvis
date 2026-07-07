@@ -1,7 +1,8 @@
 import express from "express";
 import cors from "cors";
-import { config, hasApiKey } from "./config.js";
+import { config, hasApiKey, isDemoMode } from "./config.js";
 import { seedBrain, ensureHubs } from "./brain/graph.js";
+import { seedDemoContent } from "./demo/seed.js";
 import { api } from "./routes.js";
 
 const app = express();
@@ -12,12 +13,13 @@ app.use("/api", api);
 
 seedBrain();
 ensureHubs();
+if (isDemoMode()) seedDemoContent();
 
 app.listen(config.port, () => {
   console.log(`◈ JARVIS server — http://localhost:${config.port}`);
   console.log(
     hasApiKey()
       ? "◈ Liaison Anthropic : opérationnelle."
-      : "◈ ANTHROPIC_API_KEY absente — mode hors-ligne (copiez .env.example vers .env).",
+      : "◈ Mode démo actif (aucune clé API) : réponses simulées, coût nul. Ajoutez ANTHROPIC_API_KEY dans .env pour le mode complet.",
   );
 });

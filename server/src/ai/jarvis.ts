@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { config, hasApiKey } from "../config.js";
+import { config, isDemoMode } from "../config.js";
 import { getDb, newId, save, logActivity } from "../db/store.js";
 import { addNode } from "../brain/graph.js";
 import { activeTools } from "../tools/index.js";
@@ -27,6 +27,8 @@ export interface ChatInput {
   message: string;
   modelOverride?: string;
   images?: { media_type: string; data: string }[];
+  /** vrai si le client SSE a fermé la connexion — on cesse de consommer l'API */
+  aborted?: () => boolean;
 }
 
 const MAX_TOOL_ITERATIONS = 8;
@@ -64,6 +66,13 @@ function userContent(input: ChatInput): Anthropic.MessageParam["content"] {
 }
 
 export async function runChat(input: ChatInput, emit: (e: ChatEvent) => void): Promise<void> {
+  // Mode démo (pas de clé API, ou forcé) : moteur local, coût nul.
+  if (isDemoMode()) {
+    const { runDemoChat } = await import("../demo/engine.js");
+    await runDemoChat(input, emit);
+    return;
+  }
+
   const db = getDb();
   const routing: RoutingDecision = routeModel(input.message, input.modelOverride);
   emit({ type: "meta", model: routing.model, tier: routing.tier, reason: routing.reason });
@@ -76,17 +85,6 @@ export async function runChat(input: ChatInput, emit: (e: ChatEvent) => void): P
     createdAt: new Date().toISOString(),
   });
   save();
-
-  if (!hasApiKey()) {
-    const offline =
-      "Je suis au regret de vous informer que ma liaison avec les serveurs Anthropic n'est pas configurée, Monsieur. Ajoutez une clé `ANTHROPIC_API_KEY` dans le fichier `.env`, redémarrez-moi, et je serai pleinement opérationnel.";
-    emit({ type: "text", delta: offline });
-    const id = newId("msg");
-    db.messages.push({ id, role: "assistant", content: offline, createdAt: new Date().toISOString() });
-    save();
-    emit({ type: "done", messageId: id, toolsUsed: [] });
-    return;
-  }
 
   const tools = activeTools();
   const toolDefs = tools.map((t) => t.definition);
@@ -103,6 +101,7 @@ export async function runChat(input: ChatInput, emit: (e: ChatEvent) => void): P
 
   try {
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+      if (input.aborted?.()) break; // client parti : on ne facture pas dans le vide
       const stream = anthropic.messages.stream({
         model: routing.model,
         max_tokens: 16000,

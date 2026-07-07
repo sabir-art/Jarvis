@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { config, hasApiKey } from "../config.js";
+import { config, isDemoMode } from "../config.js";
 import { getDb, newId, save, logActivity } from "../db/store.js";
 import { addNode, updateNode, similarity } from "../brain/graph.js";
 import type { WikiPage } from "../types.js";
@@ -76,7 +76,8 @@ export interface WikiSource {
 let chain: Promise<void> = Promise.resolve();
 
 export function scheduleWikiIngest(source: WikiSource): void {
-  if (!hasApiKey()) return; // sans clé API, le wiki reste silencieux
+  // Mode démo (clé absente OU JARVIS_DEMO=1) : promesse « zéro conso API » tenue.
+  if (isDemoMode()) return;
   chain = chain
     .then(() => ingest(source))
     .catch((err) => {
@@ -174,7 +175,7 @@ export function queryWiki(query: string, limit = 3): WikiPage[] {
 export async function lintWiki(): Promise<string> {
   const db = getDb();
   if (db.wikiPages.length === 0) return "Le wiki est vide — rien à auditer pour l'instant.";
-  if (!hasApiKey()) return "Audit impossible : clé API absente.";
+  if (isDemoMode()) return "Mode démo : l'audit de cohérence nécessite le mode complet (clé API), car c'est le modèle qui relit le wiki. Aucun appel n'a été effectué.";
 
   const corpus = db.wikiPages
     .slice(0, 25)

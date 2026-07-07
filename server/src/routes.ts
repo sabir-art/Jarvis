@@ -2,7 +2,8 @@ import { Router, type Request, type Response } from "express";
 import { getDb, newId, save, logActivity } from "./db/store.js";
 import { getGraph, addNode } from "./brain/graph.js";
 import { runChat, type ChatEvent } from "./ai/jarvis.js";
-import { config, hasApiKey } from "./config.js";
+import { config, hasApiKey, isDemoMode } from "./config.js";
+import { CONNECTORS, connectorData } from "./connectors/index.js";
 import { listProposals, reviewProposal } from "./selfdev/index.js";
 import { searchKnowledge } from "./memory/search.js";
 import { scheduleWikiIngest, lintWiki } from "./wiki/index.js";
@@ -15,8 +16,24 @@ api.get("/health", (_req, res) => {
   res.json({
     ok: true,
     apiKeyConfigured: hasApiKey(),
+    demoMode: isDemoMode(),
     models: config.models,
   });
+});
+
+/* ── Connecteurs ───────────────────────────────────────────────── */
+
+api.get("/connectors", (_req, res) => {
+  res.json({ connectors: CONNECTORS });
+});
+
+api.get("/connectors/:id", (req, res) => {
+  const info = CONNECTORS.find((c) => c.id === req.params.id);
+  if (!info) {
+    res.status(404).json({ error: "connecteur inconnu" });
+    return;
+  }
+  res.json({ connector: info, data: connectorData(info.id) });
 });
 
 api.get("/models", (_req, res) => {
@@ -43,12 +60,18 @@ api.post("/chat", async (req: Request, res: Response) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders?.();
 
+  let closed = false;
+  res.on("close", () => {
+    closed = true;
+  });
+
   const emit = (e: ChatEvent) => {
+    if (closed) return;
     res.write(`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`);
   };
 
   try {
-    await runChat({ message, modelOverride, images }, emit);
+    await runChat({ message, modelOverride, images, aborted: () => closed }, emit);
   } catch (err) {
     emit({ type: "error", message: err instanceof Error ? err.message : String(err) });
   } finally {

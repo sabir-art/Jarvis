@@ -86,3 +86,15 @@ export interface ToolActivity {
 }
 
 export type ModelChoice = "auto" | "fast" | "balanced" | "deep";
+
+export type OrbState = "idle" | "listening" | "thinking" | "speaking";
+
+export type ViewName = "home" | "brain" | "wiki" | "connectors" | "tasks" | "autodev";
+
+export interface ConnectorInfo {
+  id: string;
+  name: string;
+  tagline: string;
+  status: "demo" | "connected" | "available";
+  examples: string[];
+}
