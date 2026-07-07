@@ -43,7 +43,7 @@ function SpinGroup({ children }: { children: React.ReactNode }) {
 }
 
 /** Le cœur : JARVIS lui-même, au centre de toutes les galaxies. */
-function Core() {
+function Core({ label = true }: { label?: boolean }) {
   const ref = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
     if (ref.current) ref.current.scale.setScalar(1 + Math.sin(clock.elapsedTime * 2) * 0.08);
@@ -58,9 +58,11 @@ function Core() {
         <sphereGeometry args={[0.9, 16, 16]} />
         <meshBasicMaterial color="#57e6ff" transparent opacity={0.1} blending={THREE.AdditiveBlending} depthWrite={false} />
       </mesh>
-      <Html center position={[0, -1.9, 0]} zIndexRange={[2, 0]}>
-        <div className="core-label">◈ JARVIS</div>
-      </Html>
+      {label && (
+        <Html center position={[0, -1.9, 0]} zIndexRange={[2, 0]}>
+          <div className="core-label">◈ JARVIS</div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -156,7 +158,7 @@ function ClusterDust({ layout }: { layout: GalaxyLayout }) {
   );
 }
 
-function Hubs({ layout }: { layout: GalaxyLayout }) {
+function Hubs({ layout, labels = true }: { layout: GalaxyLayout; labels?: boolean }) {
   const nodes = useJarvis((s) => s.nodes);
   const selectNode = useJarvis((s) => s.selectNode);
   const hubs = nodes.filter((n) => n.type === "hub");
@@ -166,6 +168,7 @@ function Hubs({ layout }: { layout: GalaxyLayout }) {
         <Hub
           key={h.id}
           node={h}
+          labels={labels}
           position={layout.positions.get(h.id) ?? new THREE.Vector3()}
           scale={layout.sizes.get(h.id) ?? 1.5}
           count={layout.members.get(h.id)?.length ?? 0}
@@ -182,12 +185,14 @@ function Hub({
   scale,
   count,
   onSelect,
+  labels = true,
 }: {
   node: BrainNode;
   position: THREE.Vector3;
   scale: number;
   count: number;
   onSelect: () => void;
+  labels?: boolean;
 }) {
   const ref = useRef<THREE.Mesh>(null);
   const seed = useMemo(() => Math.random() * Math.PI * 2, []);
@@ -214,13 +219,15 @@ function Hub({
         <sphereGeometry args={[0.42, 16, 16]} />
         <meshBasicMaterial color={color} transparent opacity={0.09} blending={THREE.AdditiveBlending} depthWrite={false} />
       </mesh>
-      <Html center position={[0, -(scale * 0.6 + 1.1), 0]} zIndexRange={[2, 0]}>
-        <div className="hub-label" onClick={onSelect}>
-          <span className="hub-dot" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
-          {node.label}
-          <span className="hub-count">{count}</span>
-        </div>
-      </Html>
+      {labels && (
+        <Html center position={[0, -(scale * 0.6 + 1.1), 0]} zIndexRange={[2, 0]}>
+          <div className="hub-label" onClick={onSelect}>
+            <span className="hub-dot" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
+            {node.label}
+            <span className="hub-count">{count}</span>
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -372,7 +379,7 @@ export function GalaxyScene({ backdrop = false }: { backdrop?: boolean }) {
   const selectNode = useJarvis((s) => s.selectNode);
   return (
     <Canvas
-      camera={{ position: backdrop ? [0, 16, 56] : [0, 11, 40], fov: 50 }}
+      camera={{ position: backdrop ? [0, 20, 74] : [0, 11, 40], fov: 50 }}
       dpr={[1, backdrop ? 1.25 : 1.75]}
       onPointerMissed={backdrop ? undefined : () => selectNode(null, false)}
     >
@@ -380,10 +387,10 @@ export function GalaxyScene({ backdrop = false }: { backdrop?: boolean }) {
       <fog attach="fog" args={["#04070d", 45, 110]} />
       <Stars radius={110} depth={50} count={backdrop ? 1800 : 3000} factor={3.4} saturation={0} fade speed={0.3} />
       <SpinGroup>
-        <Core />
+        <Core label={!backdrop} />
         <Edges layout={layout} />
         <ClusterDust layout={layout} />
-        <Hubs layout={layout} />
+        <Hubs layout={layout} labels={!backdrop} />
         <NodeCloud layout={layout} />
         {!backdrop && <NearLabels layout={layout} />}
       </SpinGroup>

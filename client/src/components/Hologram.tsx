@@ -1,4 +1,17 @@
+import { useState } from "react";
 import { useJarvis } from "../state";
+
+/**
+ * Visuel : une vraie illustration anime est utilisée si disponible —
+ *  1. `client/public/hologram.png` (votre image locale, prioritaire) ;
+ *  2. l'illustration générée par IA (en ligne) ;
+ *  3. à défaut, la silhouette vectorielle de secours.
+ * Le noir de l'image devient transparent (mix-blend-mode: screen).
+ */
+const IMAGE_SOURCES = [
+  "/hologram.png",
+  "https://im.runware.ai/image/os/a03d21/ws/3/ii/58994107-66e8-4858-995d-32983289c174.jpg",
+];
 
 /**
  * L'hologramme — une présence numérique stylisée (inspiration : Norma,
@@ -9,6 +22,7 @@ import { useJarvis } from "../state";
  */
 export default function Hologram({ size = 300, onClick }: { size?: number; onClick?: () => void }) {
   const orbState = useJarvis((s) => s.orbState);
+  const [srcIdx, setSrcIdx] = useState(0);
 
   return (
     <div
@@ -20,6 +34,16 @@ export default function Hologram({ size = 300, onClick }: { size?: number; onCli
       title="Dites « Jarvis » ou cliquez pour parler"
     >
       <div className="holo-glow" />
+      {srcIdx < IMAGE_SOURCES.length && (
+        <img
+          className="holo-img"
+          src={IMAGE_SOURCES[srcIdx]}
+          alt=""
+          draggable={false}
+          onError={() => setSrcIdx((i) => i + 1)}
+        />
+      )}
+      {srcIdx >= IMAGE_SOURCES.length && (
       <svg viewBox="0 0 200 236" className="holo-svg" aria-hidden>
         <defs>
           <linearGradient id="holoBody" x1="0" y1="0" x2="0" y2="1">
@@ -95,6 +119,7 @@ export default function Hologram({ size = 300, onClick }: { size?: number; onCli
         <path d="M68 96 C66 130 62 150 56 164 C68 158 74 138 76 112 Z" fill="url(#holoHair)" opacity="0.8" />
         <path d="M132 96 C134 130 138 150 144 164 C132 158 126 138 124 112 Z" fill="url(#holoHair)" opacity="0.8" />
       </svg>
+      )}
 
       {/* effets de projection */}
       <div className="holo-scanlines" />

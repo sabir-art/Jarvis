@@ -244,8 +244,15 @@ button { font-family: inherit; }
   position: absolute;
   inset: 0;
   z-index: 0;
-  opacity: 0.6;
+  opacity: 0.45;
   pointer-events: none;
+}
+/* vignette : le centre reste dégagé pour l'assistant et le texte */
+.galaxy-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 46% 44% at 50% 44%, rgba(5, 5, 6, 0.82), transparent 100%);
 }
 .home-center, .thread, .composer-zone, .home-status, .hud { position: relative; z-index: 2; }
 
@@ -337,6 +344,21 @@ button { font-family: inherit; }
 }
 @keyframes holo-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .holo-svg { width: 100%; height: 100%; }
+.holo-img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  /* le noir de l'illustration disparaît sur notre fond sombre */
+  mix-blend-mode: screen;
+  /* fondu holographique vers la base */
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 78%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 78%, transparent 100%);
+  filter: brightness(1.04) saturate(1.05);
+  pointer-events: none;
+}
+.holo.speaking .holo-img { animation: holo-img-speak 0.5s ease-in-out infinite alternate; }
+@keyframes holo-img-speak { from { filter: brightness(1.02) saturate(1.05); } to { filter: brightness(1.22) saturate(1.2); } }
+.holo.listening .holo-img { filter: brightness(1.14) saturate(1.15) drop-shadow(0 0 16px rgba(110, 200, 255, 0.5)); }
+.holo.thinking .holo-img { animation: holo-flicker 2.4s steps(18) infinite; }
 .holo-glow {
   position: absolute; inset: -12%;
   background: radial-gradient(ellipse at 50% 42%, rgba(90, 180, 255, 0.16), transparent 62%);
