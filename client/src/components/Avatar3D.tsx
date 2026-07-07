@@ -107,6 +107,7 @@ export default function Avatar3D({
 }) {
   const orbState = useJarvis((s) => s.orbState);
   const [vrm, setVrm] = useState<VRM | null>(null);
+  const [eyeY, setEyeY] = useState(1.42);
 
   useEffect(() => {
     let disposed = false;
@@ -126,6 +127,15 @@ export default function Avatar3D({
         loaded.scene.traverse((o) => {
           o.frustumCulled = false;
         });
+        // Cadrage automatique : on vise les yeux, quelle que soit la
+        // taille du modèle (position réelle de l'os de la tête).
+        loaded.scene.updateMatrixWorld(true);
+        const head = loaded.humanoid?.getNormalizedBoneNode("head");
+        if (head) {
+          const p = new THREE.Vector3();
+          head.getWorldPosition(p);
+          setEyeY(p.y + 0.02);
+        }
         setVrm(loaded);
       },
       undefined,
@@ -153,8 +163,8 @@ export default function Avatar3D({
       <div className="holo-glow" />
       <Canvas
         gl={{ alpha: true, antialias: true }}
-        camera={{ position: [0, 1.38, 0.75], fov: 24 }}
-        onCreated={({ camera }) => camera.lookAt(0, 1.38, 0)}
+        camera={{ position: [0, eyeY, 1.35], fov: 24 }}
+        onCreated={({ camera }) => camera.lookAt(0, eyeY, 0)}
         dpr={[1, 2]}
       >
         <Scene vrm={vrm} />
