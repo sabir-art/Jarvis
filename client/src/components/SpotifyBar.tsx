@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getJSON, postJSON } from "../api";
+import { getJSON } from "../api";
 import { useJarvis } from "../state";
+import { playerControls } from "../spotify";
 import { IconPlay } from "./icons";
 
 /**
- * Mini-lecteur Spotify du cockpit — fiable quel que soit l'appareil :
- * l'état vient de l'API Spotify (source de vérité), les commandes passent
- * par le serveur (télécommande universelle : page J.A.R.V.I.S, app de
- * bureau, téléphone). La progression est interpolée localement entre deux
- * synchronisations, et la barre est cliquable (avance/recul).
+ * Mini-lecteur Spotify du cockpit.
+ * Fiabilité avant tout :
+ *  - quand la musique joue DANS le lecteur intégré, les boutons pilotent le
+ *    SDK local (instantané) ; sinon, l'API Spotify (télécommande
+ *    universelle : app de bureau, téléphone…) ;
+ *  - toute commande refusée AFFICHE sa raison — jamais d'échec silencieux ;
+ *  - resynchronisation immédiate puis différée (Spotify met parfois une
+ *    seconde à reconnaître un changement de piste) ;
+ *  - barre de progression cliquable, volume, minutages.
  */
 
 interface Snapshot {
@@ -18,6 +23,7 @@ interface Snapshot {
   durationMs: number;
   track: { title: string; artist: string; artwork?: string } | null;
   device: { id: string; name: string } | null;
+  volumePercent: number | null;
 }
 
 const POLL_MS = 3500;
@@ -27,13 +33,33 @@ function fmt(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** POST qui remonte le message d'erreur du serveur (pas un échec muet). */
+async function postControl(body: Record<string, unknown>): Promise<void> {
+  const res = await fetch("/api/spotify/player", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `erreur ${res.status}`);
+  }
+}
+
 export default function SpotifyBar() {
-  const sdk = useJarvis((s) => s.spotifyPlayer); // événements du lecteur intégré
+  const sdk = useJarvis((s) => s.spotifyPlayer); // lecteur intégré (événements)
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [progress, setProgress] = useState(0);
-  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const lastSync = useRef({ at: 0, ms: 0, playing: false });
   const barRef = useRef<HTMLDivElement>(null);
+  const errTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showError = (msg: string) => {
+    setError(msg);
+    if (errTimer.current) clearTimeout(errTimer.current);
+    errTimer.current = setTimeout(() => setError(null), 5000);
+  };
 
   const sync = useCallback(async () => {
     try {
@@ -70,16 +96,37 @@ export default function SpotifyBar() {
     return () => clearInterval(timer);
   }, [snap?.durationMs]);
 
-  const control = async (action: string, extra: Record<string, unknown> = {}) => {
-    if (busy) return;
-    setBusy(true);
+  const playsHere = Boolean(snap?.device && sdk.deviceId && snap.device.id === sdk.deviceId);
+
+  /** Resynchronise tout de suite, puis après le délai de propagation Spotify. */
+  const resync = () => {
+    void sync();
+    setTimeout(() => void sync(), 1200);
+  };
+
+  /**
+   * Commande : SDK local si la lecture est ici (instantané, fiable),
+   * sinon API Spotify. Échec → raison affichée.
+   */
+  const control = async (action: "toggle" | "next" | "previous") => {
+    setError(null);
     try {
-      await postJSON("/api/spotify/player", { action, ...extra });
-      await sync();
-    } catch {
-      await sync(); // même en échec : on réaffiche la réalité
-    } finally {
-      setBusy(false);
+      if (playsHere) {
+        const viaSdk =
+          action === "toggle" ? playerControls.toggle() : action === "next" ? playerControls.next() : playerControls.previous();
+        if (viaSdk) {
+          await viaSdk;
+          resync();
+          return;
+        }
+      }
+      const apiAction = action === "toggle" ? (snap?.playing ? "pause" : "play") : action;
+      const extra = action === "toggle" && !snap?.playing && !snap?.track && sdk.deviceId ? { deviceId: sdk.deviceId } : {};
+      await postControl({ action: apiAction, ...extra });
+      resync();
+    } catch (e) {
+      showError(e instanceof Error ? e.message : String(e));
+      resync();
     }
   };
 
@@ -90,7 +137,26 @@ export default function SpotifyBar() {
     const positionMs = Math.round(ratio * snap.durationMs);
     setProgress(positionMs); // retour visuel immédiat
     lastSync.current = { at: Date.now(), ms: positionMs, playing: lastSync.current.playing };
-    void control("seek", { positionMs });
+    postControl({ action: "seek", positionMs }).then(resync, (e2) => showError(String(e2 instanceof Error ? e2.message : e2)));
+  };
+
+  const volumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [volumeDraft, setVolumeDraft] = useState<number | null>(null);
+  const onVolume = (value: number) => {
+    setVolumeDraft(value); // retour visuel immédiat
+    if (volumeTimer.current) clearTimeout(volumeTimer.current);
+    volumeTimer.current = setTimeout(() => {
+      postControl({ action: "volume", volumePercent: value }).then(
+        () => {
+          setVolumeDraft(null);
+          resync();
+        },
+        (e) => {
+          setVolumeDraft(null);
+          showError(String(e instanceof Error ? e.message : e));
+        },
+      );
+    }, 250);
   };
 
   /* rien à afficher : Spotify non branché, et lecteur intégré absent */
@@ -99,7 +165,7 @@ export default function SpotifyBar() {
 
   const track = snap?.track ?? sdk.track;
   const playing = snap?.playing ?? !sdk.paused;
-  const playsHere = snap?.device && sdk.deviceId ? snap.device.id === sdk.deviceId : false;
+  const volume = volumeDraft ?? snap?.volumePercent ?? null;
 
   return (
     <section className="glass card mini spotify-bar" title={snap?.device ? `Lecture sur ${snap.device.name}` : undefined}>
@@ -117,20 +183,13 @@ export default function SpotifyBar() {
           </div>
         </div>
         <div className="sp-controls">
-          <button className="icon-btn" title="Précédent" disabled={busy || !track} onClick={() => void control("previous")}>
+          <button className="icon-btn" title="Précédent" disabled={!track} onClick={() => void control("previous")}>
             ⏮
           </button>
-          <button
-            className="icon-btn sp-play"
-            title={playing ? "Pause" : "Lecture"}
-            disabled={busy}
-            onClick={() =>
-              void control(playing ? "pause" : "play", !track && sdk.deviceId ? { deviceId: sdk.deviceId } : {})
-            }
-          >
+          <button className="icon-btn sp-play" title={playing ? "Pause" : "Lecture"} onClick={() => void control("toggle")}>
             {playing ? "⏸" : <IconPlay size={15} />}
           </button>
-          <button className="icon-btn" title="Suivant" disabled={busy || !track} onClick={() => void control("next")}>
+          <button className="icon-btn" title="Suivant" disabled={!track} onClick={() => void control("next")}>
             ⏭
           </button>
         </div>
@@ -146,12 +205,30 @@ export default function SpotifyBar() {
         </div>
       )}
 
+      {volume !== null && track && (
+        <div className="sp-volume">
+          <span className="sp-vol-ico">{volume === 0 ? "🔇" : "🔉"}</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={volume}
+            onChange={(e) => onVolume(Number(e.target.value))}
+            title={`Volume : ${volume} %`}
+          />
+        </div>
+      )}
+
       {snap?.track && sdk.ready && !playsHere && (
-        <button className="sp-transfer" onClick={() => void control("transfer", { deviceId: sdk.deviceId })}>
+        <button
+          className="sp-transfer"
+          onClick={() => postControl({ action: "transfer", deviceId: sdk.deviceId }).then(resync, (e) => showError(String(e instanceof Error ? e.message : e)))}
+        >
           ↪ Rapatrier la lecture ici
         </button>
       )}
-      {sdk.unavailable && <div className="sp-note">{sdk.unavailable}</div>}
+      {error && <div className="sp-note">✕ {error}</div>}
+      {sdk.unavailable && !error && <div className="sp-note">{sdk.unavailable}</div>}
     </section>
   );
 }

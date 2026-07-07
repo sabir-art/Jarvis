@@ -1010,6 +1010,23 @@ button { font-family: inherit; }
   box-shadow: 0 0 6px rgba(53, 224, 255, 0.5);
   transition: width 0.25s linear;
 }
+.sp-volume { display: flex; align-items: center; gap: 8px; }
+.sp-vol-ico { font-size: 11px; flex-shrink: 0; }
+.sp-volume input[type="range"] {
+  flex: 1;
+  height: 3px;
+  appearance: none;
+  background: rgba(53, 224, 255, 0.14);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.sp-volume input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(53, 224, 255, 0.6);
+}
 .sp-transfer {
   border: 1px solid var(--hairline);
   background: transparent;

@@ -480,6 +480,9 @@ export async function controlSpotify(
     const r = await spotifyCall(token, path, { method, body });
     if (r.status >= 400) {
       const msg = (r.body.error as { message?: string })?.message ?? `HTTP ${r.status}`;
+      console.warn(`◈ Spotify — commande ${action} refusée : ${r.status} ${msg}`);
+      if (/permission|scope/i.test(msg)) return { ok: false, error: "ré-autorisation Spotify requise (Connecteurs → Spotify → Ré-autoriser)" };
+      if (/restriction/i.test(msg)) return { ok: false, error: "Spotify interdit cette action sur ce contenu" };
       if (/premium/i.test(msg) || r.status === 403) return { ok: false, error: "Spotify Premium requis pour la télécommande" };
       if (r.status === 404) return { ok: false, error: "aucune lecture en cours" };
       return { ok: false, error: msg };
