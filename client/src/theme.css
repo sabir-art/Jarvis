@@ -1130,3 +1130,83 @@ button { font-family: inherit; }
   .view { padding: 20px 16px 24px; }
   .home-status { top: 10px; right: 12px; }
 }
+
+
+/* ── Cockpit trois colonnes (accueil) ─────────────────── */
+.cockpit {
+  display: grid;
+  grid-template-columns: 292px minmax(0, 1fr) 392px;
+  gap: 12px;
+  height: 100%;
+  padding: 12px;
+}
+.cockpit-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+.cockpit-left .hud { position: static; }
+.pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.orb-slot { display: flex; justify-content: center; padding: 14px 0 18px; }
+.card.mini { padding: 12px 14px; flex-shrink: 0; }
+.card.mini h2 {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 8px;
+}
+.status-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 11.5px; }
+.status-row .k { color: var(--text-3); }
+.status-row .v { color: var(--text); text-align: right; max-width: 62%; }
+
+.cockpit-center {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #04070d;
+}
+
+.cockpit-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.chat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.cockpit-chat .thread { width: auto; padding: 14px 14px 8px; }
+.cockpit-chat .composer-zone { width: auto; padding: 8px 12px 14px; }
+.cockpit-chat .bubble { max-width: 92%; }
+.suggestions.column { flex-direction: column; align-items: stretch; }
+.suggestions.column .suggestion { text-align: left; }
+
+/* le popup ne recouvre pas la colonne de chat */
+.popup { right: 416px; }
+
+@media (max-width: 1280px) {
+  .cockpit { grid-template-columns: 268px minmax(0, 1fr); }
+  .cockpit-center { display: none; }
+  .popup { right: 20px; }
+}
+@media (max-width: 860px) {
+  .cockpit { grid-template-columns: 1fr; }
+  .cockpit-left { display: none; }
+}
