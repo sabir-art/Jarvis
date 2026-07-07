@@ -203,7 +203,7 @@ export const useJarvis = create<JarvisState>((set, get) => ({
   messages: [],
   streaming: false,
   toolActivity: [],
-  modelChoice: "auto",
+  modelChoice: (localStorage.getItem("jarvis.model") as ModelChoice) ?? "auto",
   activeModel: null,
   activeModelReason: null,
   ttsEnabled: localStorage.getItem("jarvis.tts") !== "0",
@@ -223,7 +223,10 @@ export const useJarvis = create<JarvisState>((set, get) => ({
   apiKeyConfigured: true,
   demoMode: false,
 
-  setModelChoice: (m) => set({ modelChoice: m }),
+  setModelChoice: (m) => {
+    localStorage.setItem("jarvis.model", m);
+    set({ modelChoice: m });
+  },
   setTtsEnabled: (v) => {
     if (!v) stopSpeech();
     localStorage.setItem("jarvis.tts", v ? "1" : "0");

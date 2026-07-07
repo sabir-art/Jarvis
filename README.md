@@ -26,10 +26,14 @@ contenu : supprimez `server/data/jarvis.json`.
 - JARVIS répond à voix haute quand on lui parle à l'oral ; l'orbe s'anime
   (écoute, réflexion, parole).
 - **Voix neuronale réelle** : par défaut, JARVIS parle avec une voix neuronale
-  Microsoft (fr-FR-HenriNeural — masculine, posée), **gratuite et sans clé**.
-  Encore plus naturel : mettez `ELEVENLABS_API_KEY` dans `.env`
-  (elevenlabs.io, offre gratuite). Hors-ligne, repli automatique sur la voix
-  du navigateur. Réglez la voix avec `JARVIS_VOICE` (voir `.env.example`).
+  Microsoft (gratuite, sans clé). Encore plus naturel : mettez
+  `ELEVENLABS_API_KEY` dans `.env` (elevenlabs.io, offre gratuite).
+  Hors-ligne, repli automatique sur la voix du navigateur.
+- **Choix de la voix et du modèle dans l'UI** : pastille **réglages**
+  (colonne de gauche) → toutes les voix de votre compte ElevenLabs et les
+  voix Edge, avec **écoute d'un extrait** et sélection en un clic (persistée) ;
+  et le modèle IA — routage automatique ou Claude forcé (Rapide / Équilibré /
+  Profond).
 
 ## ✦ Fonctionnalités
 
@@ -147,6 +151,9 @@ GET  /api/notes|tasks|memories       collections
 POST /api/tasks/:id/toggle           cocher/décocher
 POST /api/documents                  indexer un document texte (RAG)
 GET  /api/knowledge/search?q=        recherche TF-IDF
+POST /api/tts                        synthèse vocale {text, voice?} → MP3
+GET  /api/tts/voices                 voix disponibles (ElevenLabs + Edge)
+POST /api/tts/voice                  choisir la voix {provider, id, name}
 GET  /api/wiki                       pages de synthèse (LLM Wiki)
 GET  /api/wiki/:slug                 une page complète
 POST /api/wiki/lint                  audit de cohérence du wiki

@@ -922,6 +922,40 @@ button { font-family: inherit; }
 .connect-status.err { color: var(--danger); }
 .btn.danger { color: var(--danger); border-color: rgba(255, 125, 138, 0.3); }
 
+/* ── Réglages : voix & modèle IA ── */
+.settings-sheet { max-width: 460px; }
+.settings-section { margin-top: 18px; }
+.settings-section h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.settings-sub { font-size: 11.5px; color: var(--text-3); margin: 12px 0 6px; }
+.voice-list, .model-list { list-style: none; margin: 0; padding: 0; }
+.voice-list li, .model-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.voice-list li:hover, .model-list li:hover { background: rgba(53, 197, 255, 0.05); }
+.voice-list li.active, .model-list li.active {
+  border-color: rgba(53, 224, 255, 0.35);
+  background: rgba(53, 197, 255, 0.07);
+}
+.model-list li { flex-direction: column; align-items: flex-start; gap: 2px; }
+.voice-meta { flex: 1; min-width: 0; }
+.voice-name { font-size: 13.5px; color: var(--text-1); }
+.voice-hint { font-size: 11.5px; color: var(--text-3); }
+.icon-btn.play { width: 30px; height: 30px; flex-shrink: 0; }
+.icon-btn.play.active { color: var(--accent); border-color: var(--accent); }
+
 .data-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .data-list li { padding: 11px 2px; border-bottom: 1px solid var(--hairline); }
 .data-list li:last-child { border-bottom: none; }

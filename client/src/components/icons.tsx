@@ -93,6 +93,19 @@ export const IconWave = (p: IconProps) => (
   </Base>
 );
 
+export const IconGear = (p: IconProps) => (
+  <Base {...p}>
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3 5.5 5.5" />
+  </Base>
+);
+
+export const IconPlay = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M8.5 6.2v11.6L18 12 8.5 6.2Z" />
+  </Base>
+);
+
 export const IconSpeaker = (p: IconProps) => (
   <Base {...p}>
     <path d="M4 9.5h3l4.5-3.8v12.6L7 14.5H4z" />

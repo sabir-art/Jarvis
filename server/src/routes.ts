@@ -225,7 +225,13 @@ api.post("/tts", async (req, res) => {
     return;
   }
   const { synthesize } = await import("./tts.js");
-  const out = await synthesize(text);
+  // `voice` optionnel : aperçu d'une voix précise depuis les Réglages
+  const v = req.body?.voice;
+  const voice =
+    v && (v.provider === "elevenlabs" || v.provider === "edge") && typeof v.id === "string"
+      ? { provider: v.provider as "elevenlabs" | "edge", id: v.id }
+      : undefined;
+  const out = await synthesize(text, voice);
   if (!out) {
     res.status(204).end();
     return;
@@ -233,6 +239,42 @@ api.post("/tts", async (req, res) => {
   res.setHeader("Content-Type", out.mime);
   res.setHeader("Cache-Control", "no-store");
   res.send(out.audio);
+});
+
+/** Voix disponibles : celles de votre compte ElevenLabs + voix Edge gratuites. */
+api.get("/tts/voices", async (_req, res) => {
+  const { listElevenLabsVoices, EDGE_VOICES, currentVoice } = await import("./tts.js");
+  const { getSettings } = await import("./settings.js");
+  const eleven = await listElevenLabsVoices();
+  const s = getSettings();
+  res.json({
+    elevenlabs: eleven, // null = pas de clé ou service injoignable
+    edge: EDGE_VOICES,
+    current: currentVoice(),
+    provider: s.ttsProvider ?? "auto",
+  });
+});
+
+/** Choix de la voix (persisté). */
+api.post("/tts/voice", async (req, res) => {
+  const { provider, id, name } = req.body ?? {};
+  if (provider !== "elevenlabs" && provider !== "edge") {
+    res.status(400).json({ error: "provider doit être 'elevenlabs' ou 'edge'" });
+    return;
+  }
+  if (typeof id !== "string" || !id.trim()) {
+    res.status(400).json({ error: "id de voix requis" });
+    return;
+  }
+  const { updateSettings } = await import("./settings.js");
+  const patch =
+    provider === "elevenlabs"
+      ? { ttsProvider: "elevenlabs" as const, elevenVoiceId: id, elevenVoiceName: typeof name === "string" ? name : undefined }
+      : { ttsProvider: "edge" as const, edgeVoice: id };
+  updateSettings(patch);
+  logActivity("system", `Voix de JARVIS : ${typeof name === "string" ? name : id} (${provider}).`);
+  const { currentVoice } = await import("./tts.js");
+  res.json({ ok: true, current: currentVoice() });
 });
 
 /* ── Météo (open-meteo, sans clé ; secours hors-ligne) ─────────── */

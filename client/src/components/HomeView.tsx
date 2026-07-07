@@ -7,7 +7,9 @@ import Hologram from "./Hologram";
 import Avatar3D from "./Avatar3D";
 import Hud from "./Hud";
 import BrainCanvas from "./brain/BrainCanvas";
+import SettingsSheet from "./SettingsSheet";
 import {
+  IconGear,
   IconImage,
   IconMic,
   IconOrb,
@@ -43,10 +45,12 @@ function shortModel(id?: string | null): string {
 /** Colonne de gauche : HUD, réglages, orbe, données vivantes. */
 function LeftColumn({
   onOrbClick,
+  onOpenSettings,
   dictating,
   vrmMissing,
 }: {
   onOrbClick: () => void;
+  onOpenSettings: () => void;
   dictating: boolean;
   vrmMissing: boolean;
 }) {
@@ -83,6 +87,9 @@ function LeftColumn({
         <button className="pill toggle" title="Orbe ou avatar holographique" onClick={() => setPersona(persona === "orb" ? "hologram" : "orb")}>
           {persona === "orb" ? <IconSparkles size={13} /> : <IconOrb size={13} />}
           {persona === "orb" ? "avatar" : "orbe"}
+        </button>
+        <button className="pill toggle" title="Réglages — voix et modèle IA" onClick={onOpenSettings}>
+          <IconGear size={13} /> réglages
         </button>
       </div>
 
@@ -144,6 +151,7 @@ export default function HomeView() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dictating, setDictating] = useState(false);
   const [vrmMissing, setVrmMissing] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const stopDictation = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -206,7 +214,13 @@ export default function HomeView() {
 
   return (
     <div className="cockpit">
-      <LeftColumn onOrbClick={toggleDictation} dictating={dictating} vrmMissing={vrmMissing} />
+      {settingsOpen && <SettingsSheet onClose={() => setSettingsOpen(false)} />}
+      <LeftColumn
+        onOrbClick={toggleDictation}
+        onOpenSettings={() => setSettingsOpen(true)}
+        dictating={dictating}
+        vrmMissing={vrmMissing}
+      />
 
       <section className="cockpit-center">
         <BrainCanvas
