@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM } from "@pixiv/three-vrm";
@@ -22,6 +22,32 @@ import { useJarvis } from "../state";
  */
 
 type Variant = "bust" | "space";
+
+/**
+ * Pose de repos : bras baissés, mains croisées derrière le dos (les VRM
+ * sont livrés en T-pose, bras à l'horizontale). Appliquée à chaque image
+ * avec un léger balancement pour rester vivante.
+ */
+function poseArms(vrm: VRM, t: number) {
+  const h = vrm.humanoid;
+  if (!h) return;
+  const sway = Math.sin(t * 0.7) * 0.02;
+  const lu = h.getNormalizedBoneNode("leftUpperArm");
+  const ru = h.getNormalizedBoneNode("rightUpperArm");
+  const ll = h.getNormalizedBoneNode("leftLowerArm");
+  const rl = h.getNormalizedBoneNode("rightLowerArm");
+  if (lu) {
+    lu.rotation.z = -1.32 - sway;
+    lu.rotation.x = 0.3;
+  }
+  if (ru) {
+    ru.rotation.z = 1.32 + sway;
+    ru.rotation.x = 0.3;
+  }
+  // coudes pliés : les avant-bras se replient derrière le dos
+  if (ll) ll.rotation.y = 1.2;
+  if (rl) rl.rotation.y = -1.2;
+}
 
 function VrmActor({ vrm, float = false }: { vrm: VRM; float?: boolean }) {
   const orbState = useJarvis((s) => s.orbState);
@@ -53,6 +79,9 @@ function VrmActor({ vrm, float = false }: { vrm: VRM; float?: boolean }) {
       chest.rotation.x = Math.sin(t * 1.4) * 0.012;
       chest.rotation.z = Math.sin(t * 0.6) * 0.008;
     }
+
+    /* mains derrière le dos, avec un balancement discret */
+    poseArms(vrm, t);
 
     /* tête : écoute → inclinée vers vous ; réflexion → regard en l'air */
     const head = humanoid?.getNormalizedBoneNode("head");
@@ -115,10 +144,29 @@ function Scene({ vrm, float = false }: { vrm: VRM; float?: boolean }) {
 interface Framing {
   eyeY: number; // hauteur des yeux (plan buste)
   centerY: number; // centre du corps (plan en pied)
-  dist: number; // recul caméra pour cadrer le corps entier
+  height: number; // hauteur totale du modèle
+  halfX: number; // demi-largeur du modèle (pose appliquée)
 }
 
 const SPACE_FOV = 26;
+
+/**
+ * Recul automatique de la caméra : le corps entier tient dans le cadre,
+ * en hauteur ET en largeur (rien n'est jamais coupé, quelle que soit la
+ * taille du panneau).
+ */
+function AutoFrame({ framing }: { framing: Framing }) {
+  const { camera, size } = useThree();
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const halfFov = (SPACE_FOV / 2) * (Math.PI / 180);
+    const vDist = (framing.height * 0.62) / Math.tan(halfFov);
+    const hDist = framing.halfX / (Math.tan(halfFov) * (size.width / Math.max(size.height, 1)));
+    cam.position.set(0, framing.centerY, Math.max(vDist, hDist));
+    cam.lookAt(0, framing.centerY, 0);
+  }, [camera, size.width, size.height, framing]);
+  return null;
+}
 
 export default function Avatar3D({
   size = 200,
@@ -133,7 +181,7 @@ export default function Avatar3D({
 }) {
   const orbState = useJarvis((s) => s.orbState);
   const [vrm, setVrm] = useState<VRM | null>(null);
-  const [framing, setFraming] = useState<Framing>({ eyeY: 1.42, centerY: 0.85, dist: 4.4 });
+  const [framing, setFraming] = useState<Framing>({ eyeY: 1.42, centerY: 0.85, height: 1.7, halfX: 0.5 });
 
   useEffect(() => {
     let disposed = false;
@@ -154,7 +202,10 @@ export default function Avatar3D({
           o.frustumCulled = false;
         });
         // Cadrage automatique, quelle que soit la taille du modèle :
-        // position réelle de l'os de la tête + boîte englobante du corps.
+        // pose appliquée d'abord (bras derrière le dos, sinon la T-pose
+        // fausse la largeur), puis os de la tête + boîte englobante.
+        poseArms(loaded, 0);
+        loaded.update(0);
         loaded.scene.updateMatrixWorld(true);
         const head = loaded.humanoid?.getNormalizedBoneNode("head");
         const headPos = new THREE.Vector3();
@@ -164,7 +215,8 @@ export default function Avatar3D({
         setFraming({
           eyeY: head ? headPos.y + 0.02 : height * 0.88,
           centerY: (box.max.y + box.min.y) / 2,
-          dist: (height * 0.62) / Math.tan((SPACE_FOV / 2) * (Math.PI / 180)),
+          height,
+          halfX: Math.max(Math.abs(box.min.x), Math.abs(box.max.x)) * 1.22 + 0.04,
         });
         setVrm(loaded);
       },
@@ -195,10 +247,10 @@ export default function Avatar3D({
         <div className="space-glow inner" />
         <Canvas
           gl={{ alpha: true, antialias: true }}
-          camera={{ position: [0, framing.centerY, framing.dist], fov: SPACE_FOV }}
-          onCreated={({ camera }) => camera.lookAt(0, framing.centerY, 0)}
+          camera={{ position: [0, framing.centerY, 4.4], fov: SPACE_FOV }}
           dpr={[1, 2]}
         >
+          <AutoFrame framing={framing} />
           <Scene vrm={vrm} float />
         </Canvas>
         <span className="holo-particle p1" />
