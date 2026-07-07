@@ -97,6 +97,27 @@ api.get("/connectors/spotify/token", async (_req, res) => {
   res.json({ token });
 });
 
+/** État du lecteur Spotify (morceau, progression, appareil) — pour le mini-lecteur. */
+api.get("/spotify/player", async (_req, res) => {
+  const { spotifyPlayerState } = await import("./connectors/live.js");
+  res.json(await spotifyPlayerState());
+});
+
+/** Télécommande du lecteur : play, pause, next, previous, seek, transfer. */
+api.post("/spotify/player", async (req, res) => {
+  const { controlSpotify } = await import("./connectors/live.js");
+  const { action, positionMs, deviceId } = req.body ?? {};
+  if (!["play", "pause", "next", "previous", "seek", "transfer"].includes(action)) {
+    res.status(400).json({ error: "action invalide" });
+    return;
+  }
+  const out = await controlSpotify(action, {
+    positionMs: typeof positionMs === "number" ? positionMs : undefined,
+    deviceId: typeof deviceId === "string" ? deviceId : undefined,
+  });
+  res.status(out.ok ? 200 : 422).json(out);
+});
+
 /**
  * Ré-autorisation OAuth avec le client ID/secret déjà enregistrés — utile
  * quand les droits demandés évoluent (ex. commande du lecteur Spotify).

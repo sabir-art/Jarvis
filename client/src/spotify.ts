@@ -31,6 +31,8 @@ interface SdkPlayer {
   togglePlay(): Promise<void>;
   nextTrack(): Promise<void>;
   previousTrack(): Promise<void>;
+  /** débloque la lecture DRM (exigence navigateur : geste utilisateur) */
+  activateElement?: () => Promise<void>;
 }
 declare global {
   interface Window {
@@ -105,6 +107,16 @@ export async function startSpotifyPlayer(onState: (s: Partial<PlayerState>) => v
   player.addListener("ready", (data: { device_id: string }) => {
     onState({ ready: true, deviceId: data.device_id, unavailable: undefined });
   });
+  // Déblocage DRM : les navigateurs exigent un geste utilisateur avant de
+  // laisser jouer un flux protégé — sinon la lecture s'arrête très vite.
+  // On active l'élément audio au tout premier clic/toucher sur la page.
+  const activate = () => {
+    void player?.activateElement?.();
+    window.removeEventListener("pointerdown", activate);
+    window.removeEventListener("keydown", activate);
+  };
+  window.addEventListener("pointerdown", activate);
+  window.addEventListener("keydown", activate);
   player.addListener("not_ready", () => onState({ ready: false }));
   player.addListener("account_error", () => {
     onState({ ready: false, unavailable: "compte Spotify non Premium — lecteur intégré indisponible" });
@@ -140,3 +152,12 @@ export const playerControls = {
   next: () => player?.nextTrack(),
   previous: () => player?.previousTrack(),
 };
+
+/* Rechargement à chaud (dev) : une seule instance de lecteur, toujours. */
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    player?.disconnect();
+    player = null;
+    started = false;
+  });
+}

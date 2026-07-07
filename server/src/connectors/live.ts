@@ -300,10 +300,11 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
       const devices = await spotifyCall(token, "/me/player/devices");
       if (devices.status === 401 || devices.status === 403) return "unauthorized" as const;
       const list = (devices.body.devices as { id: string; name: string; is_active: boolean }[]) ?? [];
-      // priorité : appareil actif > lecteur intégré J.A.R.V.I.S > le premier vu
+      // priorité : lecteur intégré J.A.R.V.I.S (la musique dans l'outil,
+      // c'est le but) > appareil actif > le premier vu
       return (
-        list.find((d) => d.is_active) ??
         list.find((d) => /j\.?a\.?r\.?v\.?i\.?s/i.test(d.name)) ??
+        list.find((d) => d.is_active) ??
         list[0] ??
         null
       );
@@ -387,6 +388,100 @@ export async function playOnSpotify(query: string): Promise<PlayOutcome> {
     return { ok: true, kind: play.kind, label: play.label, artist: play.artist, device: device.name, launched };
   } catch (err) {
     return { ok: false, reason: "error", detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/* ── Spotify : état du lecteur et télécommande universelle ─────── */
+
+export interface PlayerSnapshot {
+  connected: boolean;
+  playing: boolean;
+  progressMs: number;
+  durationMs: number;
+  track: { title: string; artist: string; artwork?: string } | null;
+  device: { id: string; name: string } | null;
+}
+
+/** État réel de la lecture, quel que soit l'appareil (page, app, téléphone). */
+export async function spotifyPlayerState(): Promise<PlayerSnapshot> {
+  const empty: PlayerSnapshot = { connected: false, playing: false, progressMs: 0, durationMs: 0, track: null, device: null };
+  if (!isConnected("spotify")) return empty;
+  const token = await getAccessToken("spotify");
+  if (!token) return empty;
+  try {
+    const r = await spotifyCall(token, "/me/player");
+    if (r.status === 204 || r.status >= 400) return { ...empty, connected: true };
+    const item = r.body.item as Record<string, unknown> | undefined;
+    const device = r.body.device as { id: string; name: string } | undefined;
+    return {
+      connected: true,
+      playing: Boolean(r.body.is_playing),
+      progressMs: Number(r.body.progress_ms ?? 0),
+      durationMs: Number((item?.duration_ms as number) ?? 0),
+      track: item
+        ? {
+            title: String(item.name),
+            artist: ((item.artists as { name: string }[]) ?? []).map((a) => a.name).join(", "),
+            artwork: ((item.album as { images?: { url: string }[] })?.images ?? [])[0]?.url,
+          }
+        : null,
+      device: device ? { id: device.id, name: device.name } : null,
+    };
+  } catch {
+    return { ...empty, connected: true };
+  }
+}
+
+export type PlayerAction = "play" | "pause" | "next" | "previous" | "seek" | "transfer";
+
+/**
+ * Télécommande : agit sur l'appareil en cours de lecture via l'API Web —
+ * fiable quel que soit l'endroit où joue la musique.
+ */
+export async function controlSpotify(
+  action: PlayerAction,
+  opts: { positionMs?: number; deviceId?: string } = {},
+): Promise<{ ok: boolean; error?: string }> {
+  const token = await getAccessToken("spotify");
+  if (!token) return { ok: false, error: "Spotify non connecté" };
+  try {
+    let method = "PUT";
+    let path = "";
+    let body: string | undefined;
+    switch (action) {
+      case "play":
+        path = `/me/player/play${opts.deviceId ? `?device_id=${opts.deviceId}` : ""}`;
+        break;
+      case "pause":
+        path = "/me/player/pause";
+        break;
+      case "next":
+        method = "POST";
+        path = "/me/player/next";
+        break;
+      case "previous":
+        method = "POST";
+        path = "/me/player/previous";
+        break;
+      case "seek":
+        path = `/me/player/seek?position_ms=${Math.max(0, Math.round(opts.positionMs ?? 0))}`;
+        break;
+      case "transfer":
+        if (!opts.deviceId) return { ok: false, error: "deviceId requis" };
+        path = "/me/player";
+        body = JSON.stringify({ device_ids: [opts.deviceId], play: true });
+        break;
+    }
+    const r = await spotifyCall(token, path, { method, body });
+    if (r.status >= 400) {
+      const msg = (r.body.error as { message?: string })?.message ?? `HTTP ${r.status}`;
+      if (/premium/i.test(msg) || r.status === 403) return { ok: false, error: "Spotify Premium requis pour la télécommande" };
+      if (r.status === 404) return { ok: false, error: "aucune lecture en cours" };
+      return { ok: false, error: msg };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 

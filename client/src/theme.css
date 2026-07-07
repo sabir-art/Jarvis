@@ -957,7 +957,8 @@ button { font-family: inherit; }
 .icon-btn.play.active { color: var(--accent); border-color: var(--accent); }
 
 /* ── Lecteur Spotify intégré (colonne de gauche) ── */
-.spotify-bar { display: flex; align-items: center; gap: 10px; }
+.spotify-bar { display: flex; flex-direction: column; gap: 8px; }
+.sp-row { display: flex; align-items: center; gap: 10px; }
 .sp-art {
   width: 42px; height: 42px;
   border-radius: 8px;
@@ -973,8 +974,54 @@ button { font-family: inherit; }
 .sp-meta { flex: 1; min-width: 0; }
 .sp-title { font-size: 12.5px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sp-artist { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-device { color: var(--accent); opacity: 0.8; }
 .sp-controls { display: flex; gap: 4px; }
 .sp-controls .icon-btn { width: 26px; height: 26px; font-size: 11px; }
+.sp-controls .icon-btn:disabled { opacity: 0.35; cursor: default; }
+.sp-play { color: var(--accent); }
+.sp-progress { display: flex; align-items: center; gap: 8px; }
+.sp-time { font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.sp-bar {
+  flex: 1;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.sp-bar::before { content: ""; display: none; }
+.sp-bar { position: relative; }
+.sp-bar::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  background: rgba(53, 224, 255, 0.14);
+  border-radius: 2px;
+}
+.sp-fill {
+  position: absolute;
+  left: 0; top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  background: var(--accent);
+  border-radius: 2px;
+  z-index: 1;
+  box-shadow: 0 0 6px rgba(53, 224, 255, 0.5);
+  transition: width 0.25s linear;
+}
+.sp-transfer {
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.sp-transfer:hover { background: rgba(53, 197, 255, 0.07); }
+.sp-note { font-size: 10.5px; color: var(--warn); }
 
 .data-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .data-list li { padding: 11px 2px; border-bottom: 1px solid var(--hairline); }
