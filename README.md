@@ -24,8 +24,12 @@ contenu : supprimez `server/data/jarvis.json`.
 - « Jarvis, mets de la musique » → la commande part immédiatement ; « Jarvis »
   seul → l'orbe passe en écoute et attend votre demande (8 s).
 - JARVIS répond à voix haute quand on lui parle à l'oral ; l'orbe s'anime
-  (écoute, réflexion, parole). Web Speech API native — Chrome/Edge recommandés,
-  aucun service externe.
+  (écoute, réflexion, parole).
+- **Voix neuronale réelle** : par défaut, JARVIS parle avec une voix neuronale
+  Microsoft (fr-FR-HenriNeural — masculine, posée), **gratuite et sans clé**.
+  Encore plus naturel : mettez `ELEVENLABS_API_KEY` dans `.env`
+  (elevenlabs.io, offre gratuite). Hors-ligne, repli automatique sur la voix
+  du navigateur. Réglez la voix avec `JARVIS_VOICE` (voir `.env.example`).
 
 ## ✦ Fonctionnalités
 
@@ -40,7 +44,7 @@ contenu : supprimez `server/data/jarvis.json`.
 | **Mémoire persistante** | Tout ce que JARVIS apprend (faits, notes, tâches, recherches, documents, conversations) devient un nœud du cerveau, relié sémantiquement à ses voisins. Persistance JSON sur disque. |
 | **RAG documents** | Indexation de documents texte (`POST /api/documents`) + recherche TF-IDF interrogeable par JARVIS (`search_knowledge`). |
 | **LLM Wiki** | D'après le [pattern de Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) : JARVIS **rédige et entretient des pages de synthèse** markdown interconnectées (renvois `[[...]]`). *Ingest* automatique à chaque note/mémoire/document (asynchrone, sérialisé), outil `consult_wiki` pour répondre depuis la connaissance déjà compilée, et *lint* (bouton « Auditer la cohérence ») qui traque contradictions, doublons et renvois cassés. Les pages vivent dans le domaine « Wiki » de la galaxie et se lisent en markdown. |
-| **Voix** | Mot d'activation « Jarvis » en écoute continue, carillon de réveil, dictée ponctuelle (bouton micro), synthèse vocale fr-FR avec orbe animée. Sans service externe. |
+| **Voix** | Mot d'activation « Jarvis » en écoute continue, carillon de réveil, dictée ponctuelle (bouton micro), **voix neuronale** (Edge gratuit / ElevenLabs en option, repli navigateur) avec orbe et avatar animés. |
 | **Vision** | Joignez des images au chat : elles sont envoyées à Claude (blocs image base64). |
 | **Auto-développement supervisé** | JARVIS peut proposer de **nouveaux outils** (il écrit le code JS via `propose_skill`) ; vous les approuvez ou rejetez dans le panneau *Auto-dev*. Une compétence approuvée devient immédiatement un outil actif, exécuté en bac à sable. Chaque proposition est journalisée dans le cerveau. |
 | **Cockpit** | Panneaux vivants : statut (modèle actif, routage), tâches, mémoire, propositions auto-dev, journal d'activité. |

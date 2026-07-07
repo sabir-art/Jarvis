@@ -209,6 +209,30 @@ api.put("/notes/:id", (req, res) => {
   res.json({ note });
 });
 
+/* ── Synthèse vocale neuronale ─────────────────────────────────── */
+
+/**
+ * POST /api/tts {text} → audio MP3 (voix neuronale), ou 204 si aucun
+ * fournisseur n'est joignable — le client retombe alors sur la voix du
+ * navigateur.
+ */
+api.post("/tts", async (req, res) => {
+  const text = String(req.body?.text ?? "");
+  if (!text.trim()) {
+    res.status(400).json({ error: "text requis" });
+    return;
+  }
+  const { synthesize } = await import("./tts.js");
+  const out = await synthesize(text);
+  if (!out) {
+    res.status(204).end();
+    return;
+  }
+  res.setHeader("Content-Type", out.mime);
+  res.setHeader("Cache-Control", "no-store");
+  res.send(out.audio);
+});
+
 /* ── Météo (open-meteo, sans clé ; secours hors-ligne) ─────────── */
 
 api.get("/weather", async (_req, res) => {

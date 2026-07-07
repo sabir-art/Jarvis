@@ -88,43 +88,103 @@ function speakable(md: string): string {
 }
 
 let utteranceSeq = 0;
+let currentAudio: HTMLAudioElement | null = null;
 
+/** Coupe toute parole en cours (audio neuronal comme voix navigateur). */
+function stopSpeech(): void {
+  if (currentAudio) {
+    currentAudio.onended = null;
+    currentAudio.onerror = null;
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
+/**
+ * JARVIS parle. Voix neuronale d'abord (serveur /api/tts — Edge gratuit ou
+ * ElevenLabs), voix du navigateur en repli. Les événements jarvis-tts-start /
+ * jarvis-tts-end pilotent l'orbe, l'avatar et la suppression du micro.
+ */
 function speak(text: string): void {
-  if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel(); // les onend des utterances précédentes sont ignorés (jeton)
+  stopSpeech(); // les fins des paroles précédentes sont ignorées (jeton)
   const id = ++utteranceSeq;
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = "fr-FR";
-  utt.rate = 1.02;
-  utt.pitch = 0.9;
-  const voice = window.speechSynthesis
-    .getVoices()
-    .find((v) => v.lang.startsWith("fr") && /google|natural|premium/i.test(v.name));
-  if (voice) utt.voice = voice;
 
   let started = false;
   let finished = false;
   const done = () => {
-    if (finished || id !== utteranceSeq) return; // une utterance plus récente a pris la main
+    if (finished || id !== utteranceSeq) return; // une parole plus récente a pris la main
     finished = true;
     const s = useJarvis.getState();
     s.setOrbState(s.streaming ? "thinking" : "idle");
     window.dispatchEvent(new CustomEvent("jarvis-tts-end"));
   };
-  utt.onstart = () => {
+  const begin = () => {
     started = true;
     if (id !== utteranceSeq) return;
     useJarvis.getState().setOrbState("speaking");
     window.dispatchEvent(new CustomEvent("jarvis-tts-start"));
   };
-  utt.onend = done;
-  utt.onerror = done;
-  window.speechSynthesis.speak(utt);
-  // Garde-fou : certains environnements acceptent speak() sans jamais émettre
-  // d'événement (pas de moteur TTS, autoplay bloqué) → on libère l'écoute.
-  window.setTimeout(() => {
-    if (!started) done();
-  }, 2000);
+
+  const speakWithBrowser = () => {
+    if (id !== utteranceSeq) return;
+    if (!("speechSynthesis" in window)) {
+      done();
+      return;
+    }
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = "fr-FR";
+    utt.rate = 1.02;
+    utt.pitch = 0.9;
+    const voice = window.speechSynthesis
+      .getVoices()
+      .find((v) => v.lang.startsWith("fr") && /google|natural|premium|enhanced|siri/i.test(v.name));
+    if (voice) utt.voice = voice;
+    utt.onstart = begin;
+    utt.onend = done;
+    utt.onerror = done;
+    window.speechSynthesis.speak(utt);
+    // Garde-fou : certains environnements acceptent speak() sans jamais
+    // émettre d'événement (pas de moteur TTS…) → on libère l'écoute.
+    window.setTimeout(() => {
+      if (!started) done();
+    }, 2000);
+  };
+
+  // 1. Voix neuronale via le serveur ; au moindre souci → voix navigateur.
+  void (async () => {
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (id !== utteranceSeq) return;
+      if (!res.ok || res.status === 204 || !res.headers.get("content-type")?.includes("audio")) {
+        speakWithBrowser();
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      if (id !== utteranceSeq) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      const audio = new Audio(url);
+      currentAudio = audio;
+      const finish = () => {
+        URL.revokeObjectURL(url);
+        if (currentAudio === audio) currentAudio = null;
+        done();
+      };
+      audio.onended = finish;
+      audio.onerror = finish;
+      audio.onplay = begin;
+      await audio.play();
+    } catch {
+      // lecture bloquée (autoplay) ou serveur injoignable
+      if (id === utteranceSeq && !started) speakWithBrowser();
+    }
+  })();
 }
 
 export const useJarvis = create<JarvisState>((set, get) => ({
@@ -165,7 +225,7 @@ export const useJarvis = create<JarvisState>((set, get) => ({
 
   setModelChoice: (m) => set({ modelChoice: m }),
   setTtsEnabled: (v) => {
-    if (!v) window.speechSynthesis?.cancel();
+    if (!v) stopSpeech();
     localStorage.setItem("jarvis.tts", v ? "1" : "0");
     set({ ttsEnabled: v });
   },
