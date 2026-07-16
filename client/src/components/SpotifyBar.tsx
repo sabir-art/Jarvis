@@ -24,6 +24,7 @@ interface Snapshot {
   track: { title: string; artist: string; artwork?: string } | null;
   device: { id: string; name: string } | null;
   volumePercent: number | null;
+  queue: { title: string; artist: string }[];
 }
 
 const POLL_MS = 3500;
@@ -216,6 +217,13 @@ export default function SpotifyBar() {
             onChange={(e) => onVolume(Number(e.target.value))}
             title={`Volume : ${volume} %`}
           />
+        </div>
+      )}
+
+      {track && snap && snap.queue.length > 0 && (
+        <div className="sp-queue" title={snap.queue.map((q) => `${q.title} — ${q.artist}`).join("\n")}>
+          À suivre : <b>{snap.queue[0].title}</b> — {snap.queue[0].artist}
+          {snap.queue.length > 1 && <span className="muted"> +{snap.queue.length - 1}</span>}
         </div>
       )}
 

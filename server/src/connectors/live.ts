@@ -459,11 +459,13 @@ export interface PlayerSnapshot {
   track: { title: string; artist: string; artwork?: string } | null;
   device: { id: string; name: string } | null;
   volumePercent: number | null;
+  /** les prochains morceaux de la file d'attente */
+  queue: { title: string; artist: string }[];
 }
 
 /** État réel de la lecture, quel que soit l'appareil (page, app, téléphone). */
 export async function spotifyPlayerState(): Promise<PlayerSnapshot> {
-  const empty: PlayerSnapshot = { connected: false, playing: false, progressMs: 0, durationMs: 0, track: null, device: null, volumePercent: null };
+  const empty: PlayerSnapshot = { connected: false, playing: false, progressMs: 0, durationMs: 0, track: null, device: null, volumePercent: null, queue: [] };
   if (!isConnected("spotify")) return empty;
   const token = await getAccessToken("spotify");
   if (!token) return empty;
@@ -472,6 +474,17 @@ export async function spotifyPlayerState(): Promise<PlayerSnapshot> {
     if (r.status === 204 || r.status >= 400) return { ...empty, connected: true };
     const item = r.body.item as Record<string, unknown> | undefined;
     const device = r.body.device as { id: string; name: string; volume_percent?: number } | undefined;
+    // la file d'attente réelle (les 3 prochains morceaux)
+    let queue: { title: string; artist: string }[] = [];
+    try {
+      const q = await spotifyCall(token, "/me/player/queue");
+      queue = ((q.body.queue as Record<string, unknown>[]) ?? []).slice(0, 3).map((t) => ({
+        title: String(t.name),
+        artist: ((t.artists as { name: string }[]) ?? []).map((a) => a.name).join(", "),
+      }));
+    } catch {
+      /* file indisponible : tant pis */
+    }
     return {
       connected: true,
       playing: Boolean(r.body.is_playing),
@@ -486,6 +499,7 @@ export async function spotifyPlayerState(): Promise<PlayerSnapshot> {
         : null,
       device: device ? { id: device.id, name: device.name } : null,
       volumePercent: typeof device?.volume_percent === "number" ? device.volume_percent : null,
+      queue,
     };
   } catch {
     return { ...empty, connected: true };
